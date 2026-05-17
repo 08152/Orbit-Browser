@@ -1,141 +1,112 @@
 <!DOCTYPE html>
-<html lang="de">
+<html>
 <head>
 <meta charset="UTF-8">
-<title>Orbit Browser</title>
+<title>Orbit Web Network</title>
 
 <style>
 body {
-    margin: 0;
-    font-family: Arial;
-    background: black;
-    color: white;
+  margin: 0;
+  font-family: Arial;
+  background: black;
+  color: white;
 }
 
-#topbar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 10px;
-    background: #0a0a0a;
-    border-bottom: 1px solid #222;
+#bar {
+  padding: 10px;
+  background: #0a0a0a;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
-#title {
-    font-size: 18px;
-    font-weight: bold;
+input, textarea {
+  background: #111;
+  border: 1px solid #333;
+  color: white;
+  padding: 6px;
 }
 
-#url {
-    width: 55%;
-    padding: 6px;
-    background: #111;
-    border: 1px solid #333;
-    color: white;
+textarea {
+  width: 300px;
+  height: 80px;
 }
 
 button {
-    background: #222;
-    color: white;
-    border: 1px solid #444;
-    padding: 6px 10px;
-    cursor: pointer;
-}
-
-#tabs {
-    display: flex;
-    gap: 5px;
-    padding: 5px;
-    background: #050505;
-    border-bottom: 1px solid #222;
-}
-
-.tab {
-    padding: 5px 10px;
-    background: #111;
-    border: 1px solid #333;
-    cursor: pointer;
+  background: #222;
+  border: 1px solid #444;
+  color: white;
+  padding: 6px;
+  cursor: pointer;
 }
 
 #view {
-    padding: 20px;
+  padding: 20px;
 }
 </style>
 </head>
 
 <body>
 
-<div id="topbar">
-    <div id="title">Orbit Browser</div>
-    <input id="url" placeholder="z.B. home.orbit">
-    <button onclick="go()">Go</button>
+<div id="bar">
+  <input id="creator" placeholder="creator name">
 </div>
 
-<div id="tabs"></div>
+<div id="bar">
+  <input id="open" placeholder="seite.orbit">
+  <button onclick="loadPage()">Open</button>
+</div>
 
-<div id="view">Willkommen im Orbit Browser</div>
+<div id="bar">
+  <input id="pname" placeholder="seite.orbit">
+  <textarea id="content" placeholder="HTML Inhalt"></textarea>
+  <button onclick="upload()">Upload</button>
+</div>
+
+<div id="bar">
+  <button onclick="explore()">Explore Orbit Web</button>
+</div>
+
+<div id="view">Orbit Web Network gestartet</div>
 
 <script>
-let tabs = [];
-let currentTab = 0;
+async function loadPage() {
+  let name = document.getElementById("open").value;
 
-const pages = {
-    "home.orbit": "<h1>Home</h1><p>Willkommen im Orbit Browser</p>",
-    "about.orbit": "<h1>About</h1><p>Orbit Browser Version 1</p>",
-    "system.orbit": "<h1>System</h1><p>Keine History aktiv</p>"
-};
+  let res = await fetch("/page/" + name);
+  let data = await res.json();
 
-function isBlocked(url) {
-    return url.includes("google.orbit");
+  document.getElementById("view").innerHTML = data.content;
 }
 
-function go() {
-    let url = document.getElementById("url").value.trim();
+async function upload() {
+  let name = document.getElementById("pname").value;
+  let content = document.getElementById("content").value;
+  let creator = document.getElementById("creator").value;
 
-    if (!url.endsWith(".orbit")) {
-        document.getElementById("view").innerHTML =
-            "Fehler: Alle Seiten müssen auf .orbit enden";
-        return;
-    }
+  let res = await fetch("/upload", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({ name, content, creator })
+  });
 
-    if (isBlocked(url)) {
-        document.getElementById("view").innerHTML =
-            "Zugriff verweigert";
-        return;
-    }
+  let data = await res.json();
 
-    loadTab(url);
+  document.getElementById("view").innerText =
+    data.success ? "Seite gespeichert" : data.error;
 }
 
-function loadTab(url) {
-    let content = pages[url] || "404 Seite nicht gefunden";
+async function explore() {
+  let res = await fetch("/explore");
+  let data = await res.json();
 
-    tabs.push({ url, content });
-    currentTab = tabs.length - 1;
+  let html = "<h2>Orbit Web Network</h2>";
 
-    renderTabs();
-    renderView();
-}
+  data.forEach(p => {
+    html += "<p>" + p.name + " (creator: " + p.creator + ")</p>";
+  });
 
-function renderTabs() {
-    let tabBar = document.getElementById("tabs");
-    tabBar.innerHTML = "";
-
-    tabs.forEach((t, i) => {
-        let div = document.createElement("div");
-        div.className = "tab";
-        div.innerText = t.url;
-        div.onclick = () => {
-            currentTab = i;
-            renderView();
-        };
-        tabBar.appendChild(div);
-    });
-}
-
-function renderView() {
-    document.getElementById("view").innerHTML =
-        tabs[currentTab]?.content || "Keine Seite geöffnet";
+  document.getElementById("view").innerHTML = html;
 }
 </script>
 
