@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>Orbit Browser</title>
+
+<style>
+body {
+    margin: 0;
+    font-family: Arial;
+    background: black;
+    color: white;
+}
+
+#topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px;
+    background: #0a0a0a;
+    border-bottom: 1px solid #222;
+}
+
+#title {
+    font-size: 18px;
+    font-weight: bold;
+}
+
+#url {
+    width: 55%;
+    padding: 6px;
+    background: #111;
+    border: 1px solid #333;
+    color: white;
+}
+
+button {
+    background: #222;
+    color: white;
+    border: 1px solid #444;
+    padding: 6px 10px;
+    cursor: pointer;
+}
+
+#tabs {
+    display: flex;
+    gap: 5px;
+    padding: 5px;
+    background: #050505;
+    border-bottom: 1px solid #222;
+}
+
+.tab {
+    padding: 5px 10px;
+    background: #111;
+    border: 1px solid #333;
+    cursor: pointer;
+}
+
+#view {
+    padding: 20px;
+}
+</style>
+</head>
+
+<body>
+
+<div id="topbar">
+    <div id="title">Orbit Browser</div>
+    <input id="url" placeholder="z.B. home.orbit">
+    <button onclick="go()">Go</button>
+</div>
+
+<div id="tabs"></div>
+
+<div id="view">Willkommen im Orbit Browser</div>
+
+<script>
+let tabs = [];
+let currentTab = 0;
+
+const pages = {
+    "home.orbit": "<h1>Home</h1><p>Willkommen im Orbit Browser</p>",
+    "about.orbit": "<h1>About</h1><p>Orbit Browser Version 1</p>",
+    "system.orbit": "<h1>System</h1><p>Keine History aktiv</p>"
+};
+
+function isBlocked(url) {
+    return url.includes("google.orbit");
+}
+
+function go() {
+    let url = document.getElementById("url").value.trim();
+
+    if (!url.endsWith(".orbit")) {
+        document.getElementById("view").innerHTML =
+            "Fehler: Alle Seiten müssen auf .orbit enden";
+        return;
+    }
+
+    if (isBlocked(url)) {
+        document.getElementById("view").innerHTML =
+            "Zugriff verweigert";
+        return;
+    }
+
+    loadTab(url);
+}
+
+function loadTab(url) {
+    let content = pages[url] || "404 Seite nicht gefunden";
+
+    tabs.push({ url, content });
+    currentTab = tabs.length - 1;
+
+    renderTabs();
+    renderView();
+}
+
+function renderTabs() {
+    let tabBar = document.getElementById("tabs");
+    tabBar.innerHTML = "";
+
+    tabs.forEach((t, i) => {
+        let div = document.createElement("div");
+        div.className = "tab";
+        div.innerText = t.url;
+        div.onclick = () => {
+            currentTab = i;
+            renderView();
+        };
+        tabBar.appendChild(div);
+    });
+}
+
+function renderView() {
+    document.getElementById("view").innerHTML =
+        tabs[currentTab]?.content || "Keine Seite geöffnet";
+}
+</script>
+
+</body>
+</html>
