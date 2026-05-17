@@ -1,40 +1,66 @@
 const express = require("express");
 const bodyParser = require("body-parser");
+const sqlite3 = require("sqlite3").verbose();
 
 const app = express();
 app.use(bodyParser.json());
 app.use(express.static("public"));
 
-let pages = {
-  "home.orbit": "<h1>Home</h1><p>Orbit Server läuft</p>"
-};
+// 🗄️ SQLite DB
+const db = new sqlite3.Database("./orbit.db");
 
-// Seite abrufen
+// 📦 Tabelle erstellen
+db.run(`
+CREATE TABLE IF NOT EXISTS pages (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT UNIQUE,
+  content TEXT,
+  creator TEXT
+)
+`);
+
+// 💾 Seite speichern / updaten
+app.post("/upload", (req, res) => {
+  const { name, content, creator } = req.body;
+
+  if (!name || !name.endsWith(".orbit")) {
+    return res.json({ error: "Nur .orbit Seiten erlaubt" });
+  }
+
+  db.run(
+    "INSERT OR REPLACE INTO pages (name, content, creator) VALUES (?, ?, ?)",
+    [name, content, creator || "unknown"],
+    (err) => {
+      if (err) return res.json({ error: "Speicherfehler" });
+      res.json({ success: true });
+    }
+  );
+});
+
+// 📄 Seite laden
 app.get("/page/:name", (req, res) => {
-  let name = req.params.name;
-  res.json({
-    content: pages[name] || "404 Seite nicht gefunden"
+  db.get(
+    "SELECT content FROM pages WHERE name = ?",
+    [req.params.name],
+    (err, row) => {
+      if (!row) {
+        return res.json({ content: "Seite nicht gefunden" });
+      }
+
+      res.json({ content: row.content });
+    }
+  );
+});
+
+// 🌍 Explorer (öffentliches Orbit Internet)
+app.get("/explore", (req, res) => {
+  db.all("SELECT name, creator FROM pages", (err, rows) => {
+    res.json(rows);
   });
 });
 
-// Seite erstellen / uploaden
-app.post("/upload", (req, res) => {
-  let { name, content } = req.body;
-
-  if (!name.endsWith(".orbit")) {
-    return res.json({ error: "Name muss auf .orbit enden" });
-  }
-
-  pages[name] = content;
-  res.json({ success: true });
-});
-
-// Seitenliste
-app.get("/pages", (req, res) => {
-  res.json(Object.keys(pages));
-});
-
+// 🚀 START
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log("Orbit Server läuft auf Port " + PORT);
+  console.log("Orbit Web Network läuft auf Port " + PORT);
 });
