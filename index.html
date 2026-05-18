@@ -1,124 +1,270 @@
-const express = require("express");
-const bodyParser = require("body-parser");
-const sqlite3 = require("sqlite3").verbose();
-const path = require("path");
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Orbit Browser</title>
 
-const app = express();
-app.use(bodyParser.json());
+<style>
+body{
+  margin:0;
+  background:black;
+  color:white;
+  font-family:Arial;
+}
 
-// DATABASE
-const db = new sqlite3.Database("./orbit.db");
+/* TITLE */
+h1{
+  text-align:center;
+  font-size:60px;
+  margin-top:20px;
+}
 
-// PAGES TABLE
-db.run(`
-CREATE TABLE IF NOT EXISTS pages (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  name TEXT UNIQUE,
-  content TEXT,
-  creator TEXT
-)
-`);
+/* INPUT AREA */
+#box{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  margin-top:20px;
+}
 
-// COINS TABLE
-db.run(`
-CREATE TABLE IF NOT EXISTS user (
-  id INTEGER PRIMARY KEY,
-  coins INTEGER
-)
-`);
+input, textarea{
+  background:#111;
+  border:1px solid #333;
+  color:white;
+  padding:10px;
+  margin:5px;
+  width:300px;
+}
 
-// INIT USER
-db.get("SELECT * FROM user WHERE id = 1", (err, row) => {
-  if (!row) {
-    db.run("INSERT INTO user (id, coins) VALUES (1, 5)");
+button{
+  padding:10px 15px;
+  background:#1e1e1e;
+  border:1px solid #444;
+  color:white;
+  cursor:pointer;
+  margin:5px;
+}
+
+button:hover{
+  background:#333;
+}
+
+/* COINS */
+#coinsBox{
+  position:fixed;
+  top:10px;
+  right:10px;
+  background:#111;
+  padding:10px;
+  border:1px solid #333;
+  border-radius:8px;
+}
+
+/* COIN PANEL */
+#coinPanel{
+  position:fixed;
+  top:120px;
+  right:10px;
+  background:#111;
+  padding:10px;
+  border:1px solid #333;
+  display:none;
+}
+
+/* BACK BUTTON */
+#backBtn{
+  position:fixed;
+  bottom:10px;
+  left:10px;
+}
+
+#view{
+  text-align:center;
+  margin-top:30px;
+}
+</style>
+</head>
+
+<body>
+
+<h1>Orbit</h1>
+
+<!-- COINS -->
+<div id="coinsBox">
+  Coins: <span id="coins">5</span><br>
+  <button onclick="toggleCoin()">Coin</button>
+</div>
+
+<!-- COIN PANEL -->
+<div id="coinPanel">
+  <input id="code" placeholder="Code">
+  <input id="amount" type="number" placeholder="Coins">
+  <button onclick="addCoins()">OK</button>
+</div>
+
+<button id="backBtn" onclick="back()">Back</button>
+
+<div id="box">
+
+  <input id="open" placeholder="seite.orbit / neue_.orbit">
+  <button onclick="openPage()">Open</button>
+
+  <input id="creator" placeholder="creator">
+
+  <input id="pname" placeholder="page.orbit">
+  <textarea id="content" placeholder="HTML"></textarea>
+
+  <button onclick="upload()">Hosting</button>
+  <button onclick="explore()">Explorer</button>
+
+</div>
+
+<div id="view">Orbit Ready</div>
+
+<script>
+
+/* LOCAL DATA */
+let pages = JSON.parse(localStorage.getItem("orbit_pages") || "[]");
+let coins = Number(localStorage.getItem("orbit_coins") || 5);
+
+/* HISTORY */
+let history = [];
+
+/* INIT */
+function updateCoins(){
+  document.getElementById("coins").innerText = coins;
+  localStorage.setItem("orbit_coins", coins);
+}
+
+/* LOAD SERVER COINS ONCE */
+async function loadCoins(){
+  try{
+    let res = await fetch("/coins");
+    let data = await res.json();
+
+    coins = data.coins;
+    updateCoins();
+  }catch(e){}
+}
+
+/* SYNC COINS */
+async function syncCoins(){
+  try{
+    await fetch("/synccoins", {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({ coins })
+    });
+  }catch(e){}
+}
+
+/* COIN PANEL */
+let coinOpen = false;
+function toggleCoin(){
+  coinOpen = !coinOpen;
+  document.getElementById("coinPanel").style.display =
+    coinOpen ? "block" : "none";
+}
+
+/* ADD COINS */
+async function addCoins(){
+
+  let code = document.getElementById("code").value;
+  let amount = Number(document.getElementById("amount").value);
+
+  let res = await fetch("/addcoins", {
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({ code, amount })
+  });
+
+  let data = await res.json();
+
+  if(data.success){
+    coins += amount;
+    updateCoins();
+    syncCoins();
+  }else{
+    alert(data.error);
   }
-});
+}
 
-// FRONTEND
-app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "index.html"));
-});
+/* BACK */
+function back(){
+  if(history.length <= 1) return;
 
-// GET COINS
-app.get("/coins", (req, res) => {
-  db.get("SELECT coins FROM user WHERE id = 1", (err, row) => {
-    res.json({ coins: row.coins });
-  });
-});
+  history.pop();
+  document.getElementById("view").innerHTML =
+    history[history.length - 1];
+}
 
-// SYNC COINS FROM CLIENT
-app.post("/synccoins", (req, res) => {
-  const { coins } = req.body;
+/* OPEN PAGE */
+async function openPage(){
 
-  db.run("UPDATE user SET coins = ? WHERE id = 1", [coins], () => {
-    res.json({ success: true });
-  });
-});
+  let name = document.getElementById("open").value;
 
-// ADD COINS (CODE SYSTEM)
-app.post("/addcoins", (req, res) => {
-  const { amount, code } = req.body;
-
-  if (code !== "081508151235180Rss#") {
-    return res.json({ error: "WRONG CODE" });
+  if(name === "neue_.orbit"){
+    document.getElementById("view").innerHTML =
+      "<h2>Create new page</h2>";
+    return;
   }
 
-  db.run(
-    "UPDATE user SET coins = coins + ? WHERE id = 1",
-    [amount],
-    () => {
-      res.json({ success: true });
-    }
-  );
-});
+  // LOCAL FIRST
+  let local = pages.find(p => p.name === name);
 
-// SAVE PAGE
-app.post("/upload", (req, res) => {
-  const { name, content, creator } = req.body;
-
-  if (!name.endsWith(".orbit") && !name.startsWith("neue_")) {
-    return res.json({ error: "INVALID NAME" });
+  if(local){
+    history.push(local.content);
+    document.getElementById("view").innerHTML = local.content;
+    return;
   }
 
-  db.run(
-    "INSERT OR REPLACE INTO pages (name, content, creator) VALUES (?, ?, ?)",
-    [name, content, creator || "anon"],
-    (err) => {
-      if (err) return res.json({ error: "DB ERROR" });
-      res.json({ success: true });
-    }
-  );
-});
+  // SERVER
+  let res = await fetch("/page/" + name);
+  let data = await res.json();
 
-// LOAD PAGE
-app.get("/page/:name", (req, res) => {
-  db.get(
-    "SELECT content FROM pages WHERE name = ?",
-    [req.params.name],
-    (err, row) => {
-      if (!row) return res.json({ content: "404 NOT FOUND" });
-      res.json({ content: row.content });
-    }
-  );
-});
+  history.push(data.content);
+  document.getElementById("view").innerHTML = data.content;
+}
 
-// GET ALL PAGES (SYNC)
-app.get("/allpages", (req, res) => {
-  db.all("SELECT name, content, creator FROM pages", (err, rows) => {
-    res.json(rows);
+/* UPLOAD */
+async function upload(){
+
+  let name = document.getElementById("pname").value;
+  let content = document.getElementById("content").value;
+  let creator = document.getElementById("creator").value;
+
+  pages.push({name, content, creator});
+  localStorage.setItem("orbit_pages", JSON.stringify(pages));
+
+  await fetch("/upload", {
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({ name, content, creator })
   });
-});
 
-// EXPLORE
-app.get("/explore", (req, res) => {
-  db.all("SELECT name, creator FROM pages", (err, rows) => {
-    res.json(rows);
+  document.getElementById("view").innerText =
+    "SAVED (LOCAL + SERVER)";
+}
+
+/* EXPLORE */
+async function explore(){
+
+  let res = await fetch("/allpages");
+  let data = await res.json();
+
+  let html = "<h2>Orbit Explorer</h2>";
+
+  data.forEach(p=>{
+    html += `<p>${p.name} (${p.creator})</p>`;
   });
-});
 
-// START
-const PORT = process.env.PORT || 3000;
+  document.getElementById("view").innerHTML = html;
+}
 
-app.listen(PORT, () => {
-  console.log("Orbit FULL SYSTEM RUNNING");
-});
+/* START SYNC */
+loadCoins();
+
+</script>
+
+</body>
+</html>
