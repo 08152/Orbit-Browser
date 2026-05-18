@@ -1,20 +1,163 @@
 <!DOCTYPE html>
 <html>
 <head>
-<title>Orbit</title>
+<meta charset="UTF-8">
+<title>Orbit Browser V2</title>
 
 <style>
 body{
-    background:black;
-    color:white;
-    font-family:Arial;
+  margin:0;
+  background:black;
+  color:white;
+  font-family:Arial;
+}
+
+/* TOP BAR */
+#bar{
+  display:flex;
+  gap:8px;
+  padding:10px;
+  background:#0a0a0a;
+}
+
+/* TABS */
+#tabs{
+  display:flex;
+  gap:5px;
+  padding:5px;
+  background:#111;
+}
+
+.tab{
+  padding:5px 10px;
+  background:#222;
+  cursor:pointer;
+}
+
+.tab.active{
+  background:#444;
+}
+
+/* INPUTS */
+input, textarea{
+  background:#111;
+  border:1px solid #333;
+  color:white;
+  padding:6px;
+}
+
+/* VIEW */
+#view{
+  padding:15px;
 }
 </style>
-
 </head>
+
 <body>
 
-<h1>Orbit läuft</h1>
+<h2 style="padding:10px">Orbit Browser</h2>
+
+<div id="tabs"></div>
+
+<div id="bar">
+  <input id="url" placeholder="name.orbit">
+  <button onclick="openPage()">Open</button>
+
+  <input id="creator" placeholder="creator">
+</div>
+
+<div id="bar">
+  <input id="pname" placeholder="page.orbit">
+  <textarea id="content" placeholder="HTML"></textarea>
+  <button onclick="upload()">Upload</button>
+
+  <button onclick="explore()">Explorer</button>
+</div>
+
+<div id="view">Orbit V2 Ready</div>
+
+<script>
+
+let tabs = [];
+
+/* TABS SYSTEM */
+function addTab(name, content){
+  tabs.push({name, content});
+  renderTabs();
+}
+
+function renderTabs(){
+  let box = document.getElementById("tabs");
+  box.innerHTML = "";
+
+  tabs.forEach((t,i)=>{
+    let div = document.createElement("div");
+    div.className = "tab";
+    div.innerText = t.name;
+
+    div.onclick = ()=>{
+      document.getElementById("view").innerHTML = t.content;
+    };
+
+    box.appendChild(div);
+  });
+}
+
+/* PAGE OPEN */
+async function openPage(){
+  let name = document.getElementById("url").value;
+
+  let res = await fetch("/page/" + name);
+  let data = await res.json();
+
+  addTab(name, data.content);
+  document.getElementById("view").innerHTML = data.content;
+}
+
+/* UPLOAD */
+async function upload(){
+  let name = document.getElementById("pname").value;
+  let content = document.getElementById("content").value;
+  let creator = document.getElementById("creator").value;
+
+  let res = await fetch("/upload", {
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({name,content,creator})
+  });
+
+  let data = await res.json();
+
+  document.getElementById("view").innerText =
+    data.success ? "UPLOADED" : data.error;
+}
+
+/* EXPLORE */
+async function explore(){
+  let res = await fetch("/explore");
+  let data = await res.json();
+
+  let html = "<h3>Orbit Explorer</h3>";
+
+  data.forEach(p=>{
+    html += `<p onclick="openTab('${p.name}')">
+      ${p.name} (${p.creator})
+    </p>`;
+  });
+
+  document.getElementById("view").innerHTML = html;
+}
+
+/* OPEN FROM EXPLORER */
+async function openTab(name){
+  let res = await fetch("/page/" + name);
+  let data = await res.json();
+
+  addTab(name, data.content);
+  document.getElementById("view").innerHTML = data.content;
+}
+
+</script>
 
 </body>
 </html>
