@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Orbit Browser V2</title>
+<title>Orbit Browser</title>
 
 <style>
 body{
@@ -12,109 +12,161 @@ body{
   font-family:Arial;
 }
 
-/* TOP BAR */
-#bar{
+/* TITLE */
+h1{
+  text-align:center;
+  font-size:60px;
+  margin-top:30px;
+}
+
+/* SEARCH */
+#searchBox{
   display:flex;
-  gap:8px;
-  padding:10px;
-  background:#0a0a0a;
+  flex-direction:column;
+  align-items:center;
+  margin-top:20px;
 }
 
-/* TABS */
-#tabs{
-  display:flex;
-  gap:5px;
-  padding:5px;
-  background:#111;
-}
-
-.tab{
-  padding:5px 10px;
-  background:#222;
-  cursor:pointer;
-}
-
-.tab.active{
-  background:#444;
-}
-
-/* INPUTS */
 input, textarea{
   background:#111;
   border:1px solid #333;
   color:white;
-  padding:6px;
+  padding:10px;
+  margin:5px;
+  width:300px;
+}
+
+/* BUTTON */
+button{
+  padding:10px 20px;
+  background:#1e1e1e;
+  border:1px solid #444;
+  color:white;
+  cursor:pointer;
+  margin:5px;
+}
+
+button:hover{
+  background:#333;
+}
+
+/* COINS BOX */
+#coinsBox{
+  position:fixed;
+  top:10px;
+  right:10px;
+  background:#111;
+  padding:10px;
+  border:1px solid #333;
+  border-radius:8px;
+  text-align:center;
+}
+
+/* COIN PANEL */
+#coinPanel{
+  position:fixed;
+  top:120px;
+  right:10px;
+  background:#111;
+  padding:10px;
+  border:1px solid #333;
+  display:none;
 }
 
 /* VIEW */
 #view{
-  padding:15px;
+  text-align:center;
+  margin-top:30px;
 }
 </style>
 </head>
 
 <body>
 
-<h2 style="padding:10px">Orbit Browser</h2>
+<h1>Orbit</h1>
 
-<div id="tabs"></div>
+<!-- COINS -->
+<div id="coinsBox">
+  Coins: <span id="coins">5</span><br>
+  <button onclick="toggleCoin()">Coin</button>
+</div>
 
-<div id="bar">
-  <input id="url" placeholder="name.orbit">
+<!-- COIN PANEL -->
+<div id="coinPanel">
+  <input id="code" placeholder="Code">
+  <input id="amount" type="number" placeholder="Coins">
+  <button onclick="addCoins()">OK</button>
+</div>
+
+<!-- SEARCH / HOSTING -->
+<div id="searchBox">
+
+  <input id="open" placeholder="name.orbit">
   <button onclick="openPage()">Open</button>
 
   <input id="creator" placeholder="creator">
-</div>
 
-<div id="bar">
   <input id="pname" placeholder="page.orbit">
   <textarea id="content" placeholder="HTML"></textarea>
-  <button onclick="upload()">Upload</button>
+
+  <button onclick="upload()">Hosting</button>
 
   <button onclick="explore()">Explorer</button>
+
 </div>
 
-<div id="view">Orbit V2 Ready</div>
+<div id="view">Orbit System Ready</div>
 
 <script>
 
-let tabs = [];
+let coinOpen = false;
 
-/* TABS SYSTEM */
-function addTab(name, content){
-  tabs.push({name, content});
-  renderTabs();
+// LOAD COINS
+async function loadCoins(){
+  let res = await fetch("/coins");
+  let data = await res.json();
+  document.getElementById("coins").innerText = data.coins;
 }
 
-function renderTabs(){
-  let box = document.getElementById("tabs");
-  box.innerHTML = "";
+// TOGGLE PANEL
+function toggleCoin(){
+  coinOpen = !coinOpen;
+  document.getElementById("coinPanel").style.display =
+    coinOpen ? "block" : "none";
+}
 
-  tabs.forEach((t,i)=>{
-    let div = document.createElement("div");
-    div.className = "tab";
-    div.innerText = t.name;
+// ADD COINS
+async function addCoins(){
+  let code = document.getElementById("code").value;
+  let amount = Number(document.getElementById("amount").value);
 
-    div.onclick = ()=>{
-      document.getElementById("view").innerHTML = t.content;
-    };
-
-    box.appendChild(div);
+  let res = await fetch("/addcoins", {
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({ code, amount })
   });
+
+  let data = await res.json();
+
+  if(data.success){
+    alert("Coins added");
+    loadCoins();
+  } else {
+    alert(data.error);
+  }
 }
 
-/* PAGE OPEN */
+// OPEN PAGE
 async function openPage(){
-  let name = document.getElementById("url").value;
+  let name = document.getElementById("open").value;
 
   let res = await fetch("/page/" + name);
   let data = await res.json();
 
-  addTab(name, data.content);
   document.getElementById("view").innerHTML = data.content;
 }
 
-/* UPLOAD */
+// UPLOAD PAGE
 async function upload(){
   let name = document.getElementById("pname").value;
   let content = document.getElementById("content").value;
@@ -123,7 +175,7 @@ async function upload(){
   let res = await fetch("/upload", {
     method:"POST",
     headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({name,content,creator})
+    body:JSON.stringify({ name, content, creator })
   });
 
   let data = await res.json();
@@ -132,30 +184,22 @@ async function upload(){
     data.success ? "UPLOADED" : data.error;
 }
 
-/* EXPLORE */
+// EXPLORE
 async function explore(){
   let res = await fetch("/explore");
   let data = await res.json();
 
-  let html = "<h3>Orbit Explorer</h3>";
+  let html = "<h2>Orbit Explorer</h2>";
 
   data.forEach(p=>{
-    html += `<p onclick="openTab('${p.name}')">
-      ${p.name} (${p.creator})
-    </p>`;
+    html += "<p>" + p.name + " (" + p.creator + ")</p>";
   });
 
   document.getElementById("view").innerHTML = html;
 }
 
-/* OPEN FROM EXPLORER */
-async function openTab(name){
-  let res = await fetch("/page/" + name);
-  let data = await res.json();
-
-  addTab(name, data.content);
-  document.getElementById("view").innerHTML = data.content;
-}
+// INIT
+loadCoins();
 
 </script>
 
