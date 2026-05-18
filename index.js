@@ -9,7 +9,7 @@ app.use(bodyParser.json());
 // DB
 const db = new sqlite3.Database("./orbit.db");
 
-// PAGES TABLE
+// PAGES
 db.run(`
 CREATE TABLE IF NOT EXISTS pages (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS pages (
 )
 `);
 
-// COIN TABLE
+// COINS
 db.run(`
 CREATE TABLE IF NOT EXISTS user (
   id INTEGER PRIMARY KEY,
@@ -39,23 +39,32 @@ app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "index.html"));
 });
 
-// GET COINS
+// GET COINS (SERVER)
 app.get("/coins", (req, res) => {
   db.get("SELECT coins FROM user WHERE id = 1", (err, row) => {
     res.json({ coins: row.coins });
   });
 });
 
-// ADD COINS (CODE SYSTEM)
+// SYNC COINS FROM CLIENT (LOCAL → SERVER)
+app.post("/synccoins", (req, res) => {
+  const { coins } = req.body;
+
+  db.run(
+    "UPDATE user SET coins = ? WHERE id = 1",
+    [coins],
+    () => {
+      res.json({ success: true });
+    }
+  );
+});
+
+// ADD COINS (CODE)
 app.post("/addcoins", (req, res) => {
   const { amount, code } = req.body;
 
   if (code !== "081508151235180Rss#") {
     return res.json({ error: "WRONG CODE" });
-  }
-
-  if (!amount || amount <= 0) {
-    return res.json({ error: "INVALID AMOUNT" });
   }
 
   db.run(
@@ -67,12 +76,12 @@ app.post("/addcoins", (req, res) => {
   );
 });
 
-// UPLOAD PAGE
+// PAGE SAVE
 app.post("/upload", (req, res) => {
   const { name, content, creator } = req.body;
 
-  if (!name.endsWith(".orbit")) {
-    return res.json({ error: "ONLY .orbit ALLOWED" });
+  if (!name.endsWith(".orbit") && !name.startsWith("neue_")) {
+    return res.json({ error: "ONLY .orbit OR neue_ ALLOWED" });
   }
 
   db.run(
@@ -92,7 +101,7 @@ app.get("/page/:name", (req, res) => {
     [req.params.name],
     (err, row) => {
       if (!row) return res.json({ content: "404 NOT FOUND" });
-      res.json({ content: row.content });
+      res.json(row);
     }
   );
 });
@@ -106,6 +115,7 @@ app.get("/explore", (req, res) => {
 
 // START
 const PORT = process.env.PORT || 3000;
+
 app.listen(PORT, () => {
-  console.log("Orbit FULL SYSTEM läuft");
+  console.log("Orbit System läuft");
 });
