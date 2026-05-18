@@ -1,15 +1,17 @@
 const express = require("express");
 const bodyParser = require("body-parser");
 const sqlite3 = require("sqlite3").verbose();
+const path = require("path");
 
 const app = express();
+
 app.use(bodyParser.json());
 app.use(express.static("public"));
 
 // 🗄️ SQLite DB
 const db = new sqlite3.Database("./orbit.db");
 
-// 📦 Tabelle erstellen
+// 📦 Tabelle
 db.run(`
 CREATE TABLE IF NOT EXISTS pages (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -19,7 +21,12 @@ CREATE TABLE IF NOT EXISTS pages (
 )
 `);
 
-// 💾 Seite speichern / updaten
+// 🌐 STARTSEITE FIX (WICHTIG gegen "Cannot GET /")
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "index.html"));
+});
+
+// 💾 Seite speichern
 app.post("/upload", (req, res) => {
   const { name, content, creator } = req.body;
 
@@ -31,7 +38,7 @@ app.post("/upload", (req, res) => {
     "INSERT OR REPLACE INTO pages (name, content, creator) VALUES (?, ?, ?)",
     [name, content, creator || "unknown"],
     (err) => {
-      if (err) return res.json({ error: "Speicherfehler" });
+      if (err) return res.json({ error: "Fehler beim Speichern" });
       res.json({ success: true });
     }
   );
@@ -46,21 +53,21 @@ app.get("/page/:name", (req, res) => {
       if (!row) {
         return res.json({ content: "Seite nicht gefunden" });
       }
-
       res.json({ content: row.content });
     }
   );
 });
 
-// 🌍 Explorer (öffentliches Orbit Internet)
+// 🌍 Explorer
 app.get("/explore", (req, res) => {
   db.all("SELECT name, creator FROM pages", (err, rows) => {
     res.json(rows);
   });
 });
 
-// 🚀 START
+// 🚀 START SERVER (Render kompatibel)
 const PORT = process.env.PORT || 3000;
+
 app.listen(PORT, () => {
-  console.log("Orbit Web Network läuft auf Port " + PORT);
+  console.log("Orbit Network läuft auf Port " + PORT);
 });
