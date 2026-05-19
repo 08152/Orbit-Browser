@@ -2,135 +2,236 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Orbit File Browser</title>
+<title>Orbit Browser</title>
 
 <style>
 body{
   margin:0;
-  background:#000;
-  color:white;
   font-family:Arial;
-}
-
-#top{
-  display:flex;
-  gap:8px;
-  padding:8px;
-  background:#111;
-}
-
-input, button, textarea{
-  background:#1a1a1a;
+  background:#0b0b0b;
   color:white;
-  border:1px solid #333;
-  padding:8px;
 }
 
+/* ===== TOP BAR ===== */
+#topbar{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  padding:6px;
+  background:#111;
+  border-bottom:1px solid #222;
+}
+
+/* TABS */
+#tabs{
+  display:flex;
+  gap:4px;
+  max-width:220px;
+  overflow-x:auto;
+}
+
+.tab{
+  background:#1c1c1c;
+  padding:5px 10px;
+  border-radius:6px;
+  font-size:12px;
+  cursor:pointer;
+  white-space:nowrap;
+}
+
+.tab.active{
+  background:#2a2a2a;
+}
+
+/* NAV BUTTONS */
+.navbtn{
+  background:#1a1a1a;
+  border:1px solid #333;
+  color:white;
+  padding:6px 8px;
+  cursor:pointer;
+}
+
+/* URL BAR */
+#url{
+  flex:1;
+  padding:7px;
+  background:#1a1a1a;
+  border:1px solid #333;
+  color:white;
+  border-radius:6px;
+}
+
+/* VIEW */
 #view{
   padding:20px;
+  min-height:85vh;
+  background:black;
 }
 
-.file{
-  margin:10px 0;
+/* COINS */
+#coins{
+  position:fixed;
+  top:10px;
+  right:10px;
+  background:#111;
   padding:10px;
   border:1px solid #333;
+  border-radius:8px;
+  font-size:12px;
+}
+
+/* LOADING */
+#loading{
+  display:none;
+  color:#888;
 }
 </style>
 </head>
 
 <body>
 
-<div id="top">
-<input id="name" placeholder="page.orbit">
-<button onclick="loadPage()">Load</button>
-<button onclick="savePage()">Save Page</button>
+<!-- COINS -->
+<div id="coins">
+Coins: <span id="coinValue">0</span>
 </div>
 
-<div id="view">Orbit File System Ready</div>
+<!-- TOP BAR -->
+<div id="topbar">
 
-<h3>Upload File</h3>
-<input type="file" id="file">
-<button onclick="uploadFile()">Upload</button>
+<button class="navbtn" onclick="back()">←</button>
+<button class="navbtn" onclick="forward()">→</button>
+<button class="navbtn" onclick="reloadPage()">⟳</button>
+
+<div id="tabs"></div>
+
+<button class="navbtn" onclick="newTab()">+</button>
+
+<input id="url" placeholder="page.orbit" onkeydown="go(event)">
+
+</div>
+
+<div id="view">
+<div id="loading">Loading...</div>
+Orbit Ready
+</div>
 
 <script>
 
-let currentPage = "";
+/* DATA */
+let coins = Number(localStorage.getItem("coins") || 0);
+let pages = JSON.parse(localStorage.getItem("pages") || "[]");
 
-/* LOAD PAGE */
-async function loadPage(){
+let tabs = [];
+let activeTab = 0;
+let historyStack = [];
+let historyIndex = -1;
 
-  let name = document.getElementById("name").value;
-  currentPage = name;
+/* INIT */
+document.getElementById("coinValue").innerText = coins;
 
-  let res = await fetch("/page/" + name);
-  let data = await res.json();
+/* TAB SYSTEM */
+function newTab(){
+  tabs.push({url:"", content:"New Tab"});
+  activeTab = tabs.length - 1;
+  renderTabs();
+}
 
-  let html = `<h2>${name}</h2>`;
+/* RENDER TABS */
+function renderTabs(){
 
-  if(data.content){
-    html += `<div>${data.content}</div>`;
+  let html = "";
+
+  tabs.forEach((t,i)=>{
+    html += `<div class="tab ${i===activeTab?'active':''}" onclick="switchTab(${i})">
+      ${t.url || "New Tab"}
+    </div>`;
+  });
+
+  document.getElementById("tabs").innerHTML = html;
+}
+
+/* SWITCH TAB */
+function switchTab(i){
+  activeTab = i;
+  renderTabs();
+
+  document.getElementById("view").innerHTML =
+    tabs[i].content || "Empty Tab";
+}
+
+/* NAV */
+function go(e){
+  if(e.key !== "Enter") return;
+  openPage(e.target.value);
+}
+
+/* LOADING */
+function showLoading(show){
+  document.getElementById("loading").style.display =
+    show ? "block" : "none";
+}
+
+/* OPEN PAGE */
+async function openPage(name){
+
+  showLoading(true);
+
+  let local = pages.find(p => p.name === name);
+
+  let content = "";
+
+  if(local){
+    content = local.content;
+  }else{
+    try{
+      let res = await fetch("/page/" + name);
+      let data = await res.json();
+      content = data.content || "404";
+    }catch(e){
+      content = "Offline";
+    }
   }
 
-  html += `<h3>Files</h3>`;
+  showLoading(false);
 
-  (data.files || []).forEach(f=>{
+  document.getElementById("view").innerHTML = content;
 
-    let url = "/" + f.filename;
+  /* TAB UPDATE */
+  if(tabs[activeTab]){
+    tabs[activeTab].url = name;
+    tabs[activeTab].content = content;
+    renderTabs();
+  }
 
-    if(f.type.startsWith("image")){
-      html += `<img src="${url}" width="200"><br>`;
-    }
-
-    else if(f.type.startsWith("video")){
-      html += `<video src="${url}" controls width="300"></video><br>`;
-    }
-
-    else if(f.type.startsWith("audio")){
-      html += `<audio src="${url}" controls></audio><br>`;
-    }
-
-    else{
-      html += `<a href="${url}" target="_blank">${f.filename}</a><br>`;
-    }
-
-  });
-
-  document.getElementById("view").innerHTML = html;
+  /* HISTORY */
+  historyStack.push(name);
+  historyIndex++;
 }
 
-/* SAVE PAGE */
-async function savePage(){
-
-  let name = document.getElementById("name").value;
-
-  await fetch("/page/save", {
-    method:"POST",
-    headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({
-      name,
-      content:""
-    })
-  });
-
-  alert("saved");
+/* BACK */
+function back(){
+  if(historyIndex <= 0) return;
+  historyIndex--;
+  openPage(historyStack[historyIndex]);
 }
 
-/* UPLOAD FILE */
-async function uploadFile(){
-
-  let file = document.getElementById("file").files[0];
-
-  let form = new FormData();
-  form.append("file", file);
-  form.append("page", currentPage);
-
-  await fetch("/upload", {
-    method:"POST",
-    body:form
-  });
-
-  alert("uploaded");
+/* FORWARD */
+function forward(){
+  if(historyIndex >= historyStack.length - 1) return;
+  historyIndex++;
+  openPage(historyStack[historyIndex]);
 }
+
+/* RELOAD */
+function reloadPage(){
+  if(historyStack[historyIndex]){
+    openPage(historyStack[historyIndex]);
+  }
+}
+
+/* INIT TAB */
+newTab();
 
 </script>
 
