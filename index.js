@@ -6,7 +6,7 @@ const path = require("path");
 const app = express();
 
 app.use(bodyParser.json());
-app.use(express.static(__dirname)); // wichtig für index.html
+app.use(express.static(__dirname));
 
 // DATABASE
 const db = new sqlite3.Database("./orbit.db");
@@ -18,8 +18,7 @@ db.serialize(() => {
     CREATE TABLE IF NOT EXISTS pages (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT UNIQUE,
-      content TEXT,
-      creator TEXT
+      content TEXT
     )
   `);
 
@@ -30,10 +29,10 @@ db.serialize(() => {
     )
   `);
 
-  // INIT USER SAFE
+  // ✅ NO START COINS (START = 0)
   db.get("SELECT coins FROM user WHERE id = 1", (err, row) => {
     if (!row) {
-      db.run("INSERT INTO user (id, coins) VALUES (1, 5)");
+      db.run("INSERT INTO user (id, coins) VALUES (1, 0)");
     }
   });
 
@@ -48,15 +47,15 @@ app.get("/", (req, res) => {
 app.get("/coins", (req, res) => {
   db.get("SELECT coins FROM user WHERE id = 1", (err, row) => {
     if (err || !row) {
-      return res.json({ coins: 5 });
+      return res.json({ coins: 0 });
     }
     res.json({ coins: row.coins });
   });
 });
 
 // SYNC COINS
-app.post("/synccoins", (req, res) => {
-  const coins = req.body?.coins;
+app.post("/coins/sync", (req, res) => {
+  const { coins } = req.body || {};
 
   if (typeof coins !== "number") {
     return res.json({ error: "INVALID COINS" });
@@ -65,33 +64,34 @@ app.post("/synccoins", (req, res) => {
   db.run(
     "UPDATE user SET coins = ? WHERE id = 1",
     [coins],
-    () => res.json({ success: true })
+    () => res.json({ ok: true })
   );
 });
 
-// ADD COINS
-app.post("/addcoins", (req, res) => {
-  const amount = Number(req.body?.amount);
-  const code = req.body?.code;
+// ADD COINS (CODE SYSTEM)
+app.post("/coins/add", (req, res) => {
+  const { amount, code } = req.body || {};
 
   if (code !== "081508151235180Rss#") {
     return res.json({ error: "WRONG CODE" });
   }
 
-  if (!amount || amount <= 0) {
+  const add = Number(amount);
+
+  if (!add || add <= 0) {
     return res.json({ error: "INVALID AMOUNT" });
   }
 
   db.run(
     "UPDATE user SET coins = coins + ? WHERE id = 1",
-    [amount],
-    () => res.json({ success: true })
+    [add],
+    () => res.json({ ok: true })
   );
 });
 
 // SAVE PAGE
-app.post("/upload", (req, res) => {
-  const { name, content, creator } = req.body || {};
+app.post("/page/save", (req, res) => {
+  const { name, content } = req.body || {};
 
   if (!name || typeof name !== "string") {
     return res.json({ error: "NO NAME" });
@@ -102,11 +102,11 @@ app.post("/upload", (req, res) => {
   }
 
   db.run(
-    "INSERT OR REPLACE INTO pages (name, content, creator) VALUES (?, ?, ?)",
-    [name, content || "", creator || "anon"],
+    "INSERT OR REPLACE INTO pages (name, content) VALUES (?, ?)",
+    [name, content || ""],
     (err) => {
       if (err) return res.json({ error: "DB ERROR" });
-      res.json({ success: true });
+      res.json({ ok: true });
     }
   );
 });
@@ -125,23 +125,15 @@ app.get("/page/:name", (req, res) => {
   );
 });
 
-// ALL PAGES
-app.get("/allpages", (req, res) => {
-  db.all("SELECT name, content, creator FROM pages", (err, rows) => {
+// ALL PAGES (EXPLORER)
+app.get("/pages", (req, res) => {
+  db.all("SELECT name FROM pages", (err, rows) => {
     if (err) return res.json([]);
     res.json(rows);
   });
 });
 
-// EXPLORE
-app.get("/explore", (req, res) => {
-  db.all("SELECT name, creator FROM pages", (err, rows) => {
-    if (err) return res.json([]);
-    res.json(rows);
-  });
-});
-
-// START
+// START SERVER
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
