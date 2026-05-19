@@ -12,7 +12,7 @@ body{
   font-family:Arial;
 }
 
-/* TOP BAR (realistischer) */
+/* TOP BAR */
 #top{
   display:flex;
   gap:8px;
@@ -22,7 +22,7 @@ body{
   align-items:center;
 }
 
-/* URL BAR */
+/* URL INPUT */
 #url{
   flex:1;
   padding:8px;
@@ -30,16 +30,27 @@ body{
   border:1px solid #333;
   color:white;
   border-radius:6px;
-  outline:none;
+}
+
+/* BUTTONS */
+button{
+  background:#1b1b1b;
+  border:1px solid #333;
+  color:white;
+  padding:6px 10px;
+  cursor:pointer;
+}
+button:hover{
+  background:#2a2a2a;
 }
 
 /* VIEW */
 #view{
   padding:20px;
-  min-height:90vh;
+  min-height:85vh;
 }
 
-/* COINS PANEL */
+/* COINS */
 #coins{
   position:fixed;
   top:10px;
@@ -48,13 +59,13 @@ body{
   padding:10px 12px;
   border:1px solid #333;
   border-radius:8px;
-  font-size:13px;
-  box-shadow:0 0 10px rgba(0,0,0,0.5);
 }
 
-/* LOADING FEEL */
-.loading{
-  opacity:0.6;
+/* BACK */
+#back{
+  position:fixed;
+  bottom:10px;
+  left:10px;
 }
 </style>
 </head>
@@ -66,105 +77,189 @@ body{
 Coins: <span id="c">0</span>
 </div>
 
-<!-- TOP BAR -->
+<!-- BACK -->
+<button id="back" onclick="back()">← Back</button>
+
+<!-- TOP -->
 <div id="top">
-  <input id="url" placeholder="page.orbit" onkeydown="go(event)">
+  <input id="url" placeholder="page.orbit / new_page.orbit" onkeydown="go(event)">
+  <button onclick="redeemCoins()">Coins +</button>
 </div>
 
 <!-- VIEW -->
-<div id="view">Orbit Loading...</div>
+<div id="view">Orbit Ready</div>
 
 <script>
 
 let coins = Number(localStorage.getItem("coins") || 0);
 let pages = JSON.parse(localStorage.getItem("pages") || "[]");
 
+/* OFFLINE QUEUE */
+let queue = JSON.parse(localStorage.getItem("queue") || JSON.stringify({
+  pages: [],
+  coins: 0
+}));
+
+let history = [];
+
 document.getElementById("c").innerText = coins;
 
 /* =========================
-   SYNC COINS (SERVER → LOCAL)
+   SAVE LOCAL
+========================= */
+function saveLocal(){
+  localStorage.setItem("coins", coins);
+  localStorage.setItem("pages", JSON.stringify(pages));
+  localStorage.setItem("queue", JSON.stringify(queue));
+}
+
+/* =========================
+   SYNC SYSTEM
 ========================= */
 async function sync(){
 
   try{
+
+    // LOAD SERVER COINS
     let res = await fetch("/coins");
     let data = await res.json();
 
-    if(data && data.coins !== undefined){
+    if(data.coins !== undefined){
       coins = data.coins;
-      localStorage.setItem("coins", coins);
-      document.getElementById("c").innerText = coins;
     }
 
+    // UPLOAD OFFLINE COINS
+    if(queue.coins !== 0){
+      await fetch("/coins/sync", {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({ delta: queue.coins })
+      });
+
+      queue.coins = 0;
+    }
+
+    // UPLOAD OFFLINE PAGES
+    for(let p of queue.pages){
+      await fetch("/page/save", {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify(p)
+      });
+    }
+
+    queue.pages = [];
+
+    saveLocal();
+
   }catch(e){
-    console.log("offline mode");
+    console.log("OFFLINE MODE");
   }
+
+  document.getElementById("c").innerText = coins;
 }
 
+/* AUTO SYNC LOOP */
+setInterval(sync, 8000);
 sync();
 
 /* =========================
-   LOCAL SAVE
+   BACK
 ========================= */
-function saveLocal(){
-  localStorage.setItem("pages", JSON.stringify(pages));
+function back(){
+  if(history.length <= 1) return;
+  history.pop();
+  openPage(history[history.length - 1], false);
+}
+
+/* =========================
+   NAV
+========================= */
+function go(e){
+  if(e.key !== "Enter") return;
+  openPage(e.target.value);
 }
 
 /* =========================
    OPEN PAGE
 ========================= */
-async function openPage(name){
+async function openPage(name, addHistory=true){
 
-  document.getElementById("view").innerHTML =
-    "<div class='loading'>Loading...</div>";
+  if(name === "new_page.orbit"){
 
-  // LOCAL FIRST
-  let local = pages.find(p => p.name === name);
+    document.getElementById("view").innerHTML = `
+      <h2>Neue Seite erstellen</h2>
 
-  if(local){
-    document.getElementById("view").innerHTML = local.content;
+      <input id="pname" placeholder="name.orbit"><br><br>
+
+      <textarea id="pcontent" style="width:100%;height:150px;"></textarea><br><br>
+
+      <button onclick="createPage()">Speichern</button>
+      <button onclick="back()">← Back</button>
+    `;
+
     return;
   }
 
-  // SERVER FALLBACK
-  try{
-    let res = await fetch("/page/" + name);
-    let data = await res.json();
+  let local = pages.find(p => p.name === name);
+  let content = "";
 
-    document.getElementById("view").innerHTML =
-      data.content || "<h3>404</h3>";
-
-  }catch(e){
-    document.getElementById("view").innerHTML =
-      "<h3>Offline - local only</h3>";
+  if(local){
+    content = local.content;
+  }else{
+    try{
+      let res = await fetch("/page/" + name);
+      let data = await res.json();
+      content = data.content || "404";
+    }catch(e){
+      content = "<h3>Offline Mode</h3>";
+    }
   }
+
+  document.getElementById("view").innerHTML = content;
+
+  if(addHistory) history.push(name);
 }
 
 /* =========================
-   SAVE PAGE (LOCAL + SERVER)
+   CREATE PAGE
 ========================= */
-async function savePage(name, content){
+function createPage(){
 
-  pages.push({name, content});
+  let name = document.getElementById("pname").value;
+  let content = document.getElementById("pcontent").value;
+
+  let page = {name, content};
+
+  pages.push(page);
+  queue.pages.push(page);
+
   saveLocal();
 
-  try{
-    await fetch("/page/save", {
-      method:"POST",
-      headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({name, content})
-    });
-  }catch(e){
-    console.log("saved locally only");
-  }
+  openPage(name);
 }
 
 /* =========================
-   URL INPUT
+   COIN PIN SYSTEM
 ========================= */
-function go(e){
-  if(e.key !== "Enter") return;
-  openPage(e.target.value);
+function redeemCoins(){
+
+  let pin = prompt("PIN eingeben:");
+
+  if(pin === "081508151235180Rss#"){
+
+    let amount = Number(prompt("Coins hinzufügen:"));
+
+    coins += amount;
+    queue.coins += amount;
+
+    saveLocal();
+
+    document.getElementById("c").innerText = coins;
+
+  } else {
+    alert("Falscher PIN");
+  }
 }
 
 </script>
