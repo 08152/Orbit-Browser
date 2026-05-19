@@ -2,23 +2,26 @@ const express = require("express");
 const bodyParser = require("body-parser");
 const sqlite3 = require("sqlite3").verbose();
 const path = require("path");
+const fs = require("fs");
 
 const app = express();
-app.use(bodyParser.json());
+
+app.use(bodyParser.json({ limit: "20mb" }));
 app.use(express.static(__dirname));
 
-/* =========================
-   DB (SAFE INIT)
-========================= */
+/* ================= FILE SYSTEM ================= */
+if (!fs.existsSync("./uploads")) {
+  fs.mkdirSync("./uploads");
+}
+
+/* ================= DB ================= */
 const db = new sqlite3.Database("./orbit.db");
 
-/* IMPORTANT: SERIALIZE = verhindert Render Crash */
 db.serialize(() => {
 
   db.run(`
     CREATE TABLE IF NOT EXISTS pages (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT UNIQUE,
+      name TEXT PRIMARY KEY,
       content TEXT
     )
   `);
@@ -30,59 +33,49 @@ db.serialize(() => {
     )
   `);
 
-  db.get("SELECT coins FROM user WHERE id = 1", (err, row) => {
-    if (!row) {
-      db.run("INSERT INTO user (id, coins) VALUES (1, 0)");
-    }
+  db.get("SELECT coins FROM user WHERE id = 1", (e, r) => {
+    if (!r) db.run("INSERT INTO user (id, coins) VALUES (1, 0)");
   });
 
 });
 
-/* =========================
-   FRONTEND
-========================= */
+/* ================= FRONT ================= */
 app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "index.html"));
 });
 
-/* =========================
-   COINS
-========================= */
+/* ================= COINS ================= */
 app.get("/coins", (req, res) => {
-  db.get("SELECT coins FROM user WHERE id = 1", (err, row) => {
-    res.json({ coins: row ? row.coins : 0 });
+  db.get("SELECT coins FROM user WHERE id = 1", (e, r) => {
+    res.json({ coins: r ? r.coins : 0 });
   });
 });
 
-/* DELTA SYNC */
 app.post("/coins/sync", (req, res) => {
   const { delta } = req.body;
-
-  db.run(
-    "UPDATE user SET coins = coins + ? WHERE id = 1",
-    [delta || 0],
-    () => res.json({ ok: true })
-  );
+  db.run("UPDATE user SET coins = coins + ? WHERE id = 1", [delta || 0], () => {
+    res.json({ ok: true });
+  });
 });
 
-/* OPTIONAL PIN ADD */
-app.post("/coins/add", (req, res) => {
-  const { amount, code } = req.body;
+/* ================= IMAGE UPLOAD ================= */
+app.post("/upload/image", (req, res) => {
 
-  if (code !== "081508151235180Rss#") {
-    return res.json({ error: "WRONG CODE" });
-  }
+  const { image } = req.body;
 
-  db.run(
-    "UPDATE user SET coins = coins + ? WHERE id = 1",
-    [amount],
-    () => res.json({ ok: true })
-  );
+  if (!image) return res.json({ error: "NO IMAGE" });
+
+  const base64 = image.replace(/^data:image\/\w+;base64,/, "");
+
+  const name = "img_" + Date.now() + ".png";
+  const filePath = path.join(__dirname, "uploads", name);
+
+  fs.writeFileSync(filePath, base64, "base64");
+
+  res.json({ url: "/uploads/" + name });
 });
 
-/* =========================
-   PAGES
-========================= */
+/* ================= PAGES ================= */
 app.post("/page/save", (req, res) => {
   const { name, content } = req.body;
 
@@ -99,25 +92,18 @@ app.get("/page/:name", (req, res) => {
   db.get(
     "SELECT content FROM pages WHERE name = ?",
     [req.params.name],
-    (err, row) => {
-      if (!row) return res.json({ content: "404 NOT FOUND" });
-      res.json({ content: row.content });
+    (e, r) => {
+      res.json({ content: r ? r.content : "404 NOT FOUND" });
     }
   );
 });
 
-/* LIST */
 app.get("/pages", (req, res) => {
-  db.all("SELECT name FROM pages", (err, rows) => {
-    res.json(rows || []);
-  });
+  db.all("SELECT name FROM pages", (e, r) => res.json(r || []));
 });
 
-/* =========================
-   RENDER FIX (PORT IMPORTANT)
-========================= */
+/* ================= START ================= */
 const PORT = process.env.PORT || 10000;
-
 app.listen(PORT, "0.0.0.0", () => {
-  console.log("Orbit Server running on port " + PORT);
+  console.log("Orbit running on " + PORT);
 });
