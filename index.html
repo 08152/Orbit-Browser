@@ -7,84 +7,54 @@
 <style>
 body{
   margin:0;
-  font-family:Arial;
-  background:#0b0b0b;
+  background:#0a0a0a;
   color:white;
+  font-family:Arial;
 }
 
-/* ===== TOP BAR ===== */
-#topbar{
+/* TOP BAR (realistischer) */
+#top{
   display:flex;
-  align-items:center;
-  gap:6px;
-  padding:6px;
+  gap:8px;
+  padding:8px;
   background:#111;
   border-bottom:1px solid #222;
-}
-
-/* TABS */
-#tabs{
-  display:flex;
-  gap:4px;
-  max-width:220px;
-  overflow-x:auto;
-}
-
-.tab{
-  background:#1c1c1c;
-  padding:5px 10px;
-  border-radius:6px;
-  font-size:12px;
-  cursor:pointer;
-  white-space:nowrap;
-}
-
-.tab.active{
-  background:#2a2a2a;
-}
-
-/* NAV BUTTONS */
-.navbtn{
-  background:#1a1a1a;
-  border:1px solid #333;
-  color:white;
-  padding:6px 8px;
-  cursor:pointer;
+  align-items:center;
 }
 
 /* URL BAR */
 #url{
   flex:1;
-  padding:7px;
+  padding:8px;
   background:#1a1a1a;
   border:1px solid #333;
   color:white;
   border-radius:6px;
+  outline:none;
 }
 
 /* VIEW */
 #view{
   padding:20px;
-  min-height:85vh;
-  background:black;
+  min-height:90vh;
 }
 
-/* COINS */
+/* COINS PANEL */
 #coins{
   position:fixed;
   top:10px;
   right:10px;
   background:#111;
-  padding:10px;
+  padding:10px 12px;
   border:1px solid #333;
   border-radius:8px;
-  font-size:12px;
+  font-size:13px;
+  box-shadow:0 0 10px rgba(0,0,0,0.5);
 }
 
-/* LOADING */
-#loading{
-  display:none;
-  color:#888;
+/* LOADING FEEL */
+.loading{
+  opacity:0.6;
 }
 </style>
 </head>
@@ -93,145 +63,109 @@ body{
 
 <!-- COINS -->
 <div id="coins">
-Coins: <span id="coinValue">0</span>
+Coins: <span id="c">0</span>
 </div>
 
 <!-- TOP BAR -->
-<div id="topbar">
-
-<button class="navbtn" onclick="back()">←</button>
-<button class="navbtn" onclick="forward()">→</button>
-<button class="navbtn" onclick="reloadPage()">⟳</button>
-
-<div id="tabs"></div>
-
-<button class="navbtn" onclick="newTab()">+</button>
-
-<input id="url" placeholder="page.orbit" onkeydown="go(event)">
-
+<div id="top">
+  <input id="url" placeholder="page.orbit" onkeydown="go(event)">
 </div>
 
-<div id="view">
-<div id="loading">Loading...</div>
-Orbit Ready
-</div>
+<!-- VIEW -->
+<div id="view">Orbit Loading...</div>
 
 <script>
 
-/* DATA */
 let coins = Number(localStorage.getItem("coins") || 0);
 let pages = JSON.parse(localStorage.getItem("pages") || "[]");
 
-let tabs = [];
-let activeTab = 0;
-let historyStack = [];
-let historyIndex = -1;
+document.getElementById("c").innerText = coins;
 
-/* INIT */
-document.getElementById("coinValue").innerText = coins;
+/* =========================
+   SYNC COINS (SERVER → LOCAL)
+========================= */
+async function sync(){
 
-/* TAB SYSTEM */
-function newTab(){
-  tabs.push({url:"", content:"New Tab"});
-  activeTab = tabs.length - 1;
-  renderTabs();
+  try{
+    let res = await fetch("/coins");
+    let data = await res.json();
+
+    if(data && data.coins !== undefined){
+      coins = data.coins;
+      localStorage.setItem("coins", coins);
+      document.getElementById("c").innerText = coins;
+    }
+
+  }catch(e){
+    console.log("offline mode");
+  }
 }
 
-/* RENDER TABS */
-function renderTabs(){
+sync();
 
-  let html = "";
-
-  tabs.forEach((t,i)=>{
-    html += `<div class="tab ${i===activeTab?'active':''}" onclick="switchTab(${i})">
-      ${t.url || "New Tab"}
-    </div>`;
-  });
-
-  document.getElementById("tabs").innerHTML = html;
+/* =========================
+   LOCAL SAVE
+========================= */
+function saveLocal(){
+  localStorage.setItem("pages", JSON.stringify(pages));
 }
 
-/* SWITCH TAB */
-function switchTab(i){
-  activeTab = i;
-  renderTabs();
+/* =========================
+   OPEN PAGE
+========================= */
+async function openPage(name){
 
   document.getElementById("view").innerHTML =
-    tabs[i].content || "Empty Tab";
+    "<div class='loading'>Loading...</div>";
+
+  // LOCAL FIRST
+  let local = pages.find(p => p.name === name);
+
+  if(local){
+    document.getElementById("view").innerHTML = local.content;
+    return;
+  }
+
+  // SERVER FALLBACK
+  try{
+    let res = await fetch("/page/" + name);
+    let data = await res.json();
+
+    document.getElementById("view").innerHTML =
+      data.content || "<h3>404</h3>";
+
+  }catch(e){
+    document.getElementById("view").innerHTML =
+      "<h3>Offline - local only</h3>";
+  }
 }
 
-/* NAV */
+/* =========================
+   SAVE PAGE (LOCAL + SERVER)
+========================= */
+async function savePage(name, content){
+
+  pages.push({name, content});
+  saveLocal();
+
+  try{
+    await fetch("/page/save", {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({name, content})
+    });
+  }catch(e){
+    console.log("saved locally only");
+  }
+}
+
+/* =========================
+   URL INPUT
+========================= */
 function go(e){
   if(e.key !== "Enter") return;
   openPage(e.target.value);
 }
-
-/* LOADING */
-function showLoading(show){
-  document.getElementById("loading").style.display =
-    show ? "block" : "none";
-}
-
-/* OPEN PAGE */
-async function openPage(name){
-
-  showLoading(true);
-
-  let local = pages.find(p => p.name === name);
-
-  let content = "";
-
-  if(local){
-    content = local.content;
-  }else{
-    try{
-      let res = await fetch("/page/" + name);
-      let data = await res.json();
-      content = data.content || "404";
-    }catch(e){
-      content = "Offline";
-    }
-  }
-
-  showLoading(false);
-
-  document.getElementById("view").innerHTML = content;
-
-  /* TAB UPDATE */
-  if(tabs[activeTab]){
-    tabs[activeTab].url = name;
-    tabs[activeTab].content = content;
-    renderTabs();
-  }
-
-  /* HISTORY */
-  historyStack.push(name);
-  historyIndex++;
-}
-
-/* BACK */
-function back(){
-  if(historyIndex <= 0) return;
-  historyIndex--;
-  openPage(historyStack[historyIndex]);
-}
-
-/* FORWARD */
-function forward(){
-  if(historyIndex >= historyStack.length - 1) return;
-  historyIndex++;
-  openPage(historyStack[historyIndex]);
-}
-
-/* RELOAD */
-function reloadPage(){
-  if(historyStack[historyIndex]){
-    openPage(historyStack[historyIndex]);
-  }
-}
-
-/* INIT TAB */
-newTab();
 
 </script>
 
