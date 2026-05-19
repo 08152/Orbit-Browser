@@ -7,239 +7,137 @@
 <style>
 body{
   margin:0;
-  background:black;
-  color:white;
   font-family:Arial;
+  background:#0a0a0a;
+  color:white;
 }
 
-/* TITLE */
-h1{
-  text-align:center;
-  font-size:60px;
-  margin-top:20px;
-}
-
-/* CENTER BOX */
-#box{
+/* ===== TOP BAR (Browser chrome) ===== */
+#topbar{
   display:flex;
-  flex-direction:column;
   align-items:center;
-  margin-top:20px;
-}
-
-input, textarea{
+  gap:8px;
+  padding:8px;
   background:#111;
-  border:1px solid #333;
-  color:white;
-  padding:10px;
-  margin:5px;
-  width:300px;
+  border-bottom:1px solid #222;
 }
 
-button{
-  padding:10px 15px;
-  background:#1e1e1e;
-  border:1px solid #444;
-  color:white;
+/* TABS */
+#tabs{
+  display:flex;
+  gap:6px;
+}
+
+.tab{
+  background:#1c1c1c;
+  padding:6px 10px;
+  border-radius:6px;
+  font-size:12px;
   cursor:pointer;
-  margin:5px;
 }
 
-button:hover{
-  background:#333;
-}
-
-/* COINS */
-#coinsBox{
-  position:fixed;
-  top:10px;
-  right:10px;
-  background:#111;
-  padding:10px;
+/* URL BAR */
+#url{
+  flex:1;
+  padding:8px;
+  background:#1a1a1a;
   border:1px solid #333;
-  border-radius:8px;
+  color:white;
+  border-radius:6px;
 }
 
-/* COIN PANEL */
-#coinPanel{
-  position:fixed;
-  top:120px;
-  right:10px;
-  background:#111;
-  padding:10px;
-  border:1px solid #333;
-  display:none;
-}
-
-/* BACK BUTTON */
-#backBtn{
-  position:fixed;
-  bottom:10px;
-  left:10px;
-}
-
+/* VIEWPORT */
 #view{
-  text-align:center;
-  margin-top:30px;
+  height:calc(100vh - 45px);
+  overflow:auto;
+  padding:20px;
+  background:#000;
+}
+
+/* REALISTIC LOADING LOOK */
+.placeholder{
+  color:#666;
+  font-size:14px;
 }
 </style>
 </head>
 
 <body>
 
-<h1>Orbit</h1>
+<!-- BROWSER TOP -->
+<div id="topbar">
 
-<!-- COINS -->
-<div id="coinsBox">
-  Coins: <span id="coins">5</span><br>
-  <button onclick="toggleCoin()">Coin</button>
-</div>
+  <div id="tabs"></div>
 
-<!-- COIN PANEL -->
-<div id="coinPanel">
-  <input id="code" placeholder="Code">
-  <input id="amount" type="number" placeholder="Coins">
-
-  <button onclick="addCoins()">OK</button>
-  <button onclick="toggleCoin()">Zurück</button>
-</div>
-
-<button id="backBtn" onclick="back()">Back</button>
-
-<div id="box">
-
-  <!-- PAGE OPEN -->
-  <input id="open" placeholder="seite.orbit / new_page.orbit">
-  <button onclick="openPage()">Open</button>
-
-  <!-- HOSTING -->
-  <input id="creator" placeholder="creator">
-
-  <input id="pname" placeholder="page.orbit">
-  <textarea id="content" placeholder="HTML"></textarea>
-
-  <button onclick="upload()">Hosting</button>
-  <button onclick="explore()">Explorer</button>
+  <input id="url" placeholder="search or enter .orbit" onkeydown="go(event)">
 
 </div>
 
-<div id="view">Orbit Ready</div>
+<!-- VIEW -->
+<div id="view">
+  <div class="placeholder">Orbit Browser ready</div>
+</div>
 
 <script>
 
 /* DATA */
 let pages = JSON.parse(localStorage.getItem("orbit_pages") || "[]");
-let coins = Number(localStorage.getItem("orbit_coins") || 5);
+let tabs = [];
 
-let history = [];
+/* NAV */
+function go(e){
+  if(e.key !== "Enter") return;
 
-/* COINS */
-function updateCoins(){
-  document.getElementById("coins").innerText = coins;
-  localStorage.setItem("orbit_coins", coins);
-}
-
-/* COIN PANEL */
-function toggleCoin(){
-  let p = document.getElementById("coinPanel");
-  p.style.display = (p.style.display === "block") ? "none" : "block";
-}
-
-/* ADD COINS */
-async function addCoins(){
-
-  let code = document.getElementById("code").value;
-  let amount = Number(document.getElementById("amount").value);
-
-  let res = await fetch("/addcoins", {
-    method:"POST",
-    headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({ code, amount })
-  });
-
-  let data = await res.json();
-
-  if(data.success){
-    coins += amount;
-    updateCoins();
-  }
-}
-
-/* BACK */
-function back(){
-  if(history.length <= 1) return;
-
-  history.pop();
-  document.getElementById("view").innerHTML =
-    history[history.length - 1];
+  let url = document.getElementById("url").value;
+  openPage(url);
 }
 
 /* OPEN PAGE */
-async function openPage(){
+function openPage(name){
 
-  let name = document.getElementById("open").value;
+  let page = pages.find(p => p.name === name);
 
-  /* ❌ REMOVED: neue_.orbit */
+  if(!page){
 
-  /* NEW PAGE ROUTE */
-  if(name === "new_page.orbit"){
     document.getElementById("view").innerHTML =
-      "<h2>Neue Seite erstellen</h2>";
+      `<div class="placeholder">404 - page not found</div>`;
+
+    addTab(name);
     return;
   }
 
-  let local = pages.find(p => p.name === name);
+  /* REAL BROWSER VIEW */
+  document.getElementById("view").innerHTML = `
+    <div style="color:#777;font-size:12px;margin-bottom:10px;">
+      Loaded: ${name}
+    </div>
+    ${page.content}
+  `;
 
-  if(local){
-    history.push(local.content);
-    document.getElementById("view").innerHTML = local.content;
-    return;
-  }
-
-  let res = await fetch("/page/" + name);
-  let data = await res.json();
-
-  history.push(data.content);
-  document.getElementById("view").innerHTML = data.content;
+  addTab(name);
 }
 
-/* UPLOAD */
-async function upload(){
+/* TABS */
+function addTab(name){
 
-  let name = document.getElementById("pname").value;
-  let content = document.getElementById("content").value;
-  let creator = document.getElementById("creator").value;
-
-  pages.push({name, content, creator});
-  localStorage.setItem("orbit_pages", JSON.stringify(pages));
-
-  await fetch("/upload", {
-    method:"POST",
-    headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({ name, content, creator })
-  });
-
-  document.getElementById("view").innerText =
-    "SAVED";
+  tabs.push(name);
+  renderTabs();
 }
 
-/* EXPLORE */
-async function explore(){
+function renderTabs(){
 
-  let res = await fetch("/allpages");
-  let data = await res.json();
-
-  let html = "<h2>Explorer</h2>";
-
-  data.forEach(p=>{
-    html += `<p>${p.name}</p>`;
-  });
-
-  document.getElementById("view").innerHTML = html;
+  document.getElementById("tabs").innerHTML =
+    tabs.map((t,i)=>`
+      <div class="tab" onclick="switchTab(${i})">
+        ${t}
+      </div>
+    `).join("");
 }
 
-/* INIT */
-updateCoins();
+/* SWITCH TAB */
+function switchTab(i){
+  openPage(tabs[i]);
+}
 
 </script>
 
