@@ -1,116 +1,141 @@
 const express = require("express");
 const bodyParser = require("body-parser");
 const sqlite3 = require("sqlite3").verbose();
-const multer = require("multer");
 const path = require("path");
-const fs = require("fs");
 
 const app = express();
 
 app.use(bodyParser.json());
-app.use(express.static("uploads"));
 app.use(express.static(__dirname));
 
-// STORAGE
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    if (!fs.existsSync("uploads")) fs.mkdirSync("uploads");
-    cb(null, "uploads/");
-  },
-  filename: function (req, file, cb) {
-    cb(null, Date.now() + "-" + file.originalname);
+/* =========================
+   DATABASE
+========================= */
+const db = new sqlite3.Database("./orbit.db");
+
+/* PAGES TABLE */
+db.run(`
+CREATE TABLE IF NOT EXISTS pages (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT UNIQUE,
+  content TEXT
+)
+`);
+
+/* USER TABLE */
+db.run(`
+CREATE TABLE IF NOT EXISTS user (
+  id INTEGER PRIMARY KEY,
+  coins INTEGER
+)
+`);
+
+/* INIT USER */
+db.get("SELECT * FROM user WHERE id = 1", (err, row) => {
+  if (!row) {
+    db.run("INSERT INTO user (id, coins) VALUES (1, 0)");
   }
 });
 
-const upload = multer({ storage });
-
-// DB
-const db = new sqlite3.Database("./orbit.db");
-
-db.serialize(() => {
-
-  db.run(`
-    CREATE TABLE IF NOT EXISTS pages (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT UNIQUE,
-      content TEXT
-    )
-  `);
-
-  db.run(`
-    CREATE TABLE IF NOT EXISTS files (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      page TEXT,
-      filename TEXT,
-      type TEXT
-    )
-  `);
-
-});
-
-// FRONTEND
+/* =========================
+   FRONTEND
+========================= */
 app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "index.html"));
 });
 
-/* SAVE PAGE */
-app.post("/page/save", (req, res) => {
-  const { name, content } = req.body;
+/* =========================
+   COINS GET
+========================= */
+app.get("/coins", (req, res) => {
+  db.get("SELECT coins FROM user WHERE id = 1", (err, row) => {
+    if (!row) return res.json({ coins: 0 });
+    res.json({ coins: row.coins });
+  });
+});
+
+/* =========================
+   COINS SYNC (OFFLINE DELTA)
+========================= */
+app.post("/coins/sync", (req, res) => {
+  const { delta } = req.body;
 
   db.run(
-    "INSERT OR REPLACE INTO pages (name, content) VALUES (?, ?)",
-    [name, content],
+    "UPDATE user SET coins = coins + ? WHERE id = 1",
+    [delta],
+    () => {
+      res.json({ ok: true });
+    }
+  );
+});
+
+/* =========================
+   COINS ADD (PIN SYSTEM OPTIONAL)
+========================= */
+app.post("/coins/add", (req, res) => {
+  const { amount, code } = req.body;
+
+  if (code !== "081508151235180Rss#") {
+    return res.json({ error: "WRONG CODE" });
+  }
+
+  db.run(
+    "UPDATE user SET coins = coins + ? WHERE id = 1",
+    [amount],
     () => res.json({ ok: true })
   );
 });
 
-/* LOAD PAGE */
+/* =========================
+   SAVE PAGE
+========================= */
+app.post("/page/save", (req, res) => {
+  const { name, content } = req.body;
+
+  if (!name) {
+    return res.json({ error: "NO NAME" });
+  }
+
+  db.run(
+    "INSERT OR REPLACE INTO pages (name, content) VALUES (?, ?)",
+    [name, content],
+    () => {
+      res.json({ ok: true });
+    }
+  );
+});
+
+/* =========================
+   LOAD PAGE
+========================= */
 app.get("/page/:name", (req, res) => {
   db.get(
     "SELECT * FROM pages WHERE name = ?",
     [req.params.name],
     (err, row) => {
-      if (!row) return res.json({ error: "404" });
+      if (!row) return res.json({ content: "404 NOT FOUND" });
 
-      db.all(
-        "SELECT * FROM files WHERE page = ?",
-        [req.params.name],
-        (e, files) => {
-          res.json({
-            content: row.content,
-            files
-          });
-        }
-      );
+      res.json({
+        content: row.content
+      });
     }
   );
 });
 
-/* UPLOAD FILE */
-app.post("/upload", upload.single("file"), (req, res) => {
-
-  const { page } = req.body;
-
-  db.run(
-    "INSERT INTO files (page, filename, type) VALUES (?, ?, ?)",
-    [page, req.file.filename, req.file.mimetype],
-    () => res.json({ ok: true })
-  );
-
+/* =========================
+   ALL PAGES (EXPLORER)
+========================= */
+app.get("/pages", (req, res) => {
+  db.all("SELECT name FROM pages", (err, rows) => {
+    res.json(rows);
+  });
 });
 
-/* LIST FILES */
-app.get("/files/:page", (req, res) => {
-  db.all(
-    "SELECT * FROM files WHERE page = ?",
-    [req.params.page],
-    (err, rows) => {
-      res.json(rows);
-    }
-  );
-});
-
+/* =========================
+   START SERVER
+========================= */
 const PORT = process.env.PORT || 3000;
+
 app.listen(PORT, () => {
-  console.log("Orbit File System Running");
+  console.log("Orbit Browser Server Running on port " + PORT);
 });
