@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Orbit Browser</title>
+<title>Orbit File Browser</title>
 
 <style>
 body{
@@ -12,245 +12,124 @@ body{
   font-family:Arial;
 }
 
-/* TOP BAR */
-#topbar{
+#top{
   display:flex;
   gap:8px;
   padding:8px;
   background:#111;
-  border-bottom:1px solid #222;
 }
 
-#url{
-  flex:1;
-  padding:8px;
+input, button, textarea{
   background:#1a1a1a;
-  border:1px solid #333;
   color:white;
-  border-radius:6px;
-}
-
-/* BUTTONS */
-button{
-  background:#1e1e1e;
   border:1px solid #333;
-  color:white;
-  padding:6px 10px;
-  cursor:pointer;
+  padding:8px;
 }
 
-button:hover{
-  background:#333;
-}
-
-/* VIEW */
 #view{
   padding:20px;
-  min-height:80vh;
 }
 
-/* COINS */
-#coins{
-  position:fixed;
-  top:10px;
-  right:10px;
-  background:#111;
+.file{
+  margin:10px 0;
   padding:10px;
   border:1px solid #333;
-  border-radius:8px;
-}
-
-/* PANEL */
-#panel{
-  position:fixed;
-  right:10px;
-  top:80px;
-  background:#111;
-  border:1px solid #333;
-  padding:10px;
-  display:none;
 }
 </style>
 </head>
 
 <body>
 
-<!-- COINS -->
-<div id="coins">
-Coins: <span id="coinValue">0</span><br>
-<button onclick="togglePanel()">Coin</button>
+<div id="top">
+<input id="name" placeholder="page.orbit">
+<button onclick="loadPage()">Load</button>
+<button onclick="savePage()">Save Page</button>
 </div>
 
-<!-- COIN PANEL -->
-<div id="panel">
-<input id="code" placeholder="Code"><br>
-<input id="amount" type="number" placeholder="Coins"><br>
-<button onclick="addCoins()">OK</button>
-<button onclick="togglePanel()">Back</button>
-</div>
+<div id="view">Orbit File System Ready</div>
 
-<!-- TOP -->
-<div id="topbar">
-
-<input id="url" placeholder="page.orbit / new_page.orbit" onkeydown="go(event)">
-
-<button onclick="savePageUI()">Hosting</button>
-<button onclick="explore()">Explorer</button>
-
-</div>
-
-<!-- VIEW -->
-<div id="view">Orbit Ready</div>
+<h3>Upload File</h3>
+<input type="file" id="file">
+<button onclick="uploadFile()">Upload</button>
 
 <script>
 
-let coins = 0;
-let pages = JSON.parse(localStorage.getItem("pages") || "[]");
+let currentPage = "";
 
-/* INIT */
-async function init(){
+/* LOAD PAGE */
+async function loadPage(){
 
-  try{
-    let res = await fetch("/coins");
-    let data = await res.json();
+  let name = document.getElementById("name").value;
+  currentPage = name;
 
-    coins = data.coins;
-    document.getElementById("coinValue").innerText = coins;
+  let res = await fetch("/page/" + name);
+  let data = await res.json();
 
-  }catch(e){
-    console.log("offline mode");
+  let html = `<h2>${name}</h2>`;
+
+  if(data.content){
+    html += `<div>${data.content}</div>`;
   }
-}
 
-init();
+  html += `<h3>Files</h3>`;
 
-/* COIN PANEL */
-function togglePanel(){
-  let p = document.getElementById("panel");
-  p.style.display = (p.style.display === "block") ? "none" : "block";
-}
+  (data.files || []).forEach(f=>{
 
-/* ADD COINS */
-async function addCoins(){
+    let url = "/" + f.filename;
 
-  let code = document.getElementById("code").value;
-  let amount = Number(document.getElementById("amount").value);
-
-  try{
-
-    let res = await fetch("/coins/add", {
-      method:"POST",
-      headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({code, amount})
-    });
-
-    let data = await res.json();
-
-    if(data.ok){
-      coins += amount;
-      document.getElementById("coinValue").innerText = coins;
+    if(f.type.startsWith("image")){
+      html += `<img src="${url}" width="200"><br>`;
     }
 
-  }catch(e){
-    console.log("offline");
-  }
+    else if(f.type.startsWith("video")){
+      html += `<video src="${url}" controls width="300"></video><br>`;
+    }
 
+    else if(f.type.startsWith("audio")){
+      html += `<audio src="${url}" controls></audio><br>`;
+    }
+
+    else{
+      html += `<a href="${url}" target="_blank">${f.filename}</a><br>`;
+    }
+
+  });
+
+  document.getElementById("view").innerHTML = html;
 }
 
-/* URL NAV */
-function go(e){
-  if(e.key !== "Enter") return;
+/* SAVE PAGE */
+async function savePage(){
 
-  let url = e.target.value;
+  let name = document.getElementById("name").value;
 
-  openPage(url);
+  await fetch("/page/save", {
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({
+      name,
+      content:""
+    })
+  });
+
+  alert("saved");
 }
 
-/* OPEN PAGE */
-async function openPage(name){
+/* UPLOAD FILE */
+async function uploadFile(){
 
-  if(name === "new_page.orbit"){
-    document.getElementById("view").innerHTML =
-      `
-      <h2>Neue Seite erstellen</h2>
-      <input id="pname" placeholder="name.orbit"><br>
-      <textarea id="pcontent" placeholder="HTML"></textarea><br>
-      <button onclick="createPage()">Save</button>
-      `;
-    return;
-  }
+  let file = document.getElementById("file").files[0];
 
-  // local first
-  let local = pages.find(p => p.name === name);
+  let form = new FormData();
+  form.append("file", file);
+  form.append("page", currentPage);
 
-  if(local){
-    document.getElementById("view").innerHTML = local.content;
-    return;
-  }
+  await fetch("/upload", {
+    method:"POST",
+    body:form
+  });
 
-  try{
-
-    let res = await fetch("/page/" + name);
-    let data = await res.json();
-
-    document.getElementById("view").innerHTML = data.content;
-
-  }catch(e){
-    document.getElementById("view").innerHTML =
-      "<h3>Offline</h3>";
-  }
-
-}
-
-/* CREATE PAGE */
-async function createPage(){
-
-  let name = document.getElementById("pname").value;
-  let content = document.getElementById("pcontent").value;
-
-  pages.push({name, content});
-  localStorage.setItem("pages", JSON.stringify(pages));
-
-  try{
-    await fetch("/page/save", {
-      method:"POST",
-      headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({name, content})
-    });
-  }catch(e){
-    console.log("saved local only");
-  }
-
-  document.getElementById("view").innerHTML =
-    "Saved";
-}
-
-/* SAVE UI BUTTON */
-function savePageUI(){
-  document.getElementById("view").innerHTML =
-    "<h3>Use new_page.orbit to create pages</h3>";
-}
-
-/* EXPLORE */
-async function explore(){
-
-  try{
-    let res = await fetch("/pages");
-    let data = await res.json();
-
-    let html = "<h2>Explorer</h2>";
-
-    data.forEach(p=>{
-      html += `<p>${p.name}</p>`;
-    });
-
-    document.getElementById("view").innerHTML = html;
-
-  }catch(e){
-    document.getElementById("view").innerHTML =
-      "<h3>No connection</h3>";
-  }
-
+  alert("uploaded");
 }
 
 </script>
