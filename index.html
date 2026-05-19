@@ -7,36 +7,20 @@
 <style>
 body{
   margin:0;
-  font-family:Arial;
-  background:#0a0a0a;
+  background:#000;
   color:white;
+  font-family:Arial;
 }
 
-/* ===== TOP BAR (Browser chrome) ===== */
+/* TOP BAR */
 #topbar{
   display:flex;
-  align-items:center;
   gap:8px;
   padding:8px;
   background:#111;
   border-bottom:1px solid #222;
 }
 
-/* TABS */
-#tabs{
-  display:flex;
-  gap:6px;
-}
-
-.tab{
-  background:#1c1c1c;
-  padding:6px 10px;
-  border-radius:6px;
-  font-size:12px;
-  cursor:pointer;
-}
-
-/* URL BAR */
 #url{
   flex:1;
   padding:8px;
@@ -46,97 +30,227 @@ body{
   border-radius:6px;
 }
 
-/* VIEWPORT */
-#view{
-  height:calc(100vh - 45px);
-  overflow:auto;
-  padding:20px;
-  background:#000;
+/* BUTTONS */
+button{
+  background:#1e1e1e;
+  border:1px solid #333;
+  color:white;
+  padding:6px 10px;
+  cursor:pointer;
 }
 
-/* REALISTIC LOADING LOOK */
-.placeholder{
-  color:#666;
-  font-size:14px;
+button:hover{
+  background:#333;
+}
+
+/* VIEW */
+#view{
+  padding:20px;
+  min-height:80vh;
+}
+
+/* COINS */
+#coins{
+  position:fixed;
+  top:10px;
+  right:10px;
+  background:#111;
+  padding:10px;
+  border:1px solid #333;
+  border-radius:8px;
+}
+
+/* PANEL */
+#panel{
+  position:fixed;
+  right:10px;
+  top:80px;
+  background:#111;
+  border:1px solid #333;
+  padding:10px;
+  display:none;
 }
 </style>
 </head>
 
 <body>
 
-<!-- BROWSER TOP -->
+<!-- COINS -->
+<div id="coins">
+Coins: <span id="coinValue">0</span><br>
+<button onclick="togglePanel()">Coin</button>
+</div>
+
+<!-- COIN PANEL -->
+<div id="panel">
+<input id="code" placeholder="Code"><br>
+<input id="amount" type="number" placeholder="Coins"><br>
+<button onclick="addCoins()">OK</button>
+<button onclick="togglePanel()">Back</button>
+</div>
+
+<!-- TOP -->
 <div id="topbar">
 
-  <div id="tabs"></div>
+<input id="url" placeholder="page.orbit / new_page.orbit" onkeydown="go(event)">
 
-  <input id="url" placeholder="search or enter .orbit" onkeydown="go(event)">
+<button onclick="savePageUI()">Hosting</button>
+<button onclick="explore()">Explorer</button>
 
 </div>
 
 <!-- VIEW -->
-<div id="view">
-  <div class="placeholder">Orbit Browser ready</div>
-</div>
+<div id="view">Orbit Ready</div>
 
 <script>
 
-/* DATA */
-let pages = JSON.parse(localStorage.getItem("orbit_pages") || "[]");
-let tabs = [];
+let coins = 0;
+let pages = JSON.parse(localStorage.getItem("pages") || "[]");
 
-/* NAV */
+/* INIT */
+async function init(){
+
+  try{
+    let res = await fetch("/coins");
+    let data = await res.json();
+
+    coins = data.coins;
+    document.getElementById("coinValue").innerText = coins;
+
+  }catch(e){
+    console.log("offline mode");
+  }
+}
+
+init();
+
+/* COIN PANEL */
+function togglePanel(){
+  let p = document.getElementById("panel");
+  p.style.display = (p.style.display === "block") ? "none" : "block";
+}
+
+/* ADD COINS */
+async function addCoins(){
+
+  let code = document.getElementById("code").value;
+  let amount = Number(document.getElementById("amount").value);
+
+  try{
+
+    let res = await fetch("/coins/add", {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({code, amount})
+    });
+
+    let data = await res.json();
+
+    if(data.ok){
+      coins += amount;
+      document.getElementById("coinValue").innerText = coins;
+    }
+
+  }catch(e){
+    console.log("offline");
+  }
+
+}
+
+/* URL NAV */
 function go(e){
   if(e.key !== "Enter") return;
 
-  let url = document.getElementById("url").value;
+  let url = e.target.value;
+
   openPage(url);
 }
 
 /* OPEN PAGE */
-function openPage(name){
+async function openPage(name){
 
-  let page = pages.find(p => p.name === name);
-
-  if(!page){
-
+  if(name === "new_page.orbit"){
     document.getElementById("view").innerHTML =
-      `<div class="placeholder">404 - page not found</div>`;
-
-    addTab(name);
+      `
+      <h2>Neue Seite erstellen</h2>
+      <input id="pname" placeholder="name.orbit"><br>
+      <textarea id="pcontent" placeholder="HTML"></textarea><br>
+      <button onclick="createPage()">Save</button>
+      `;
     return;
   }
 
-  /* REAL BROWSER VIEW */
-  document.getElementById("view").innerHTML = `
-    <div style="color:#777;font-size:12px;margin-bottom:10px;">
-      Loaded: ${name}
-    </div>
-    ${page.content}
-  `;
+  // local first
+  let local = pages.find(p => p.name === name);
 
-  addTab(name);
+  if(local){
+    document.getElementById("view").innerHTML = local.content;
+    return;
+  }
+
+  try{
+
+    let res = await fetch("/page/" + name);
+    let data = await res.json();
+
+    document.getElementById("view").innerHTML = data.content;
+
+  }catch(e){
+    document.getElementById("view").innerHTML =
+      "<h3>Offline</h3>";
+  }
+
 }
 
-/* TABS */
-function addTab(name){
+/* CREATE PAGE */
+async function createPage(){
 
-  tabs.push(name);
-  renderTabs();
+  let name = document.getElementById("pname").value;
+  let content = document.getElementById("pcontent").value;
+
+  pages.push({name, content});
+  localStorage.setItem("pages", JSON.stringify(pages));
+
+  try{
+    await fetch("/page/save", {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({name, content})
+    });
+  }catch(e){
+    console.log("saved local only");
+  }
+
+  document.getElementById("view").innerHTML =
+    "Saved";
 }
 
-function renderTabs(){
-
-  document.getElementById("tabs").innerHTML =
-    tabs.map((t,i)=>`
-      <div class="tab" onclick="switchTab(${i})">
-        ${t}
-      </div>
-    `).join("");
+/* SAVE UI BUTTON */
+function savePageUI(){
+  document.getElementById("view").innerHTML =
+    "<h3>Use new_page.orbit to create pages</h3>";
 }
 
-/* SWITCH TAB */
-function switchTab(i){
-  openPage(tabs[i]);
+/* EXPLORE */
+async function explore(){
+
+  try{
+    let res = await fetch("/pages");
+    let data = await res.json();
+
+    let html = "<h2>Explorer</h2>";
+
+    data.forEach(p=>{
+      html += `<p>${p.name}</p>`;
+    });
+
+    document.getElementById("view").innerHTML = html;
+
+  }catch(e){
+    document.getElementById("view").innerHTML =
+      "<h3>No connection</h3>";
+  }
+
 }
 
 </script>
