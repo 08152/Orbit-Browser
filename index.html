@@ -19,7 +19,7 @@ h1{
   margin-top:20px;
 }
 
-/* INPUT AREA */
+/* CENTER BOX */
 #box{
   display:flex;
   flex-direction:column;
@@ -99,16 +99,20 @@ button:hover{
 <div id="coinPanel">
   <input id="code" placeholder="Code">
   <input id="amount" type="number" placeholder="Coins">
+
   <button onclick="addCoins()">OK</button>
+  <button onclick="toggleCoin()">Zurück</button>
 </div>
 
 <button id="backBtn" onclick="back()">Back</button>
 
 <div id="box">
 
-  <input id="open" placeholder="seite.orbit / neue_.orbit">
+  <!-- PAGE OPEN -->
+  <input id="open" placeholder="seite.orbit / new_page.orbit">
   <button onclick="openPage()">Open</button>
 
+  <!-- HOSTING -->
   <input id="creator" placeholder="creator">
 
   <input id="pname" placeholder="page.orbit">
@@ -123,47 +127,22 @@ button:hover{
 
 <script>
 
-/* LOCAL DATA */
+/* DATA */
 let pages = JSON.parse(localStorage.getItem("orbit_pages") || "[]");
 let coins = Number(localStorage.getItem("orbit_coins") || 5);
 
-/* HISTORY */
 let history = [];
 
-/* INIT */
+/* COINS */
 function updateCoins(){
   document.getElementById("coins").innerText = coins;
   localStorage.setItem("orbit_coins", coins);
 }
 
-/* LOAD SERVER COINS ONCE */
-async function loadCoins(){
-  try{
-    let res = await fetch("/coins");
-    let data = await res.json();
-
-    coins = data.coins;
-    updateCoins();
-  }catch(e){}
-}
-
-/* SYNC COINS */
-async function syncCoins(){
-  try{
-    await fetch("/synccoins", {
-      method:"POST",
-      headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({ coins })
-    });
-  }catch(e){}
-}
-
 /* COIN PANEL */
-let coinOpen = false;
 function toggleCoin(){
-  coinOpen = !coinOpen;
-  document.getElementById("coinPanel").style.display =
-    coinOpen ? "block" : "none";
+  let p = document.getElementById("coinPanel");
+  p.style.display = (p.style.display === "block") ? "none" : "block";
 }
 
 /* ADD COINS */
@@ -183,9 +162,6 @@ async function addCoins(){
   if(data.success){
     coins += amount;
     updateCoins();
-    syncCoins();
-  }else{
-    alert(data.error);
   }
 }
 
@@ -203,13 +179,15 @@ async function openPage(){
 
   let name = document.getElementById("open").value;
 
-  if(name === "neue_.orbit"){
+  /* ❌ REMOVED: neue_.orbit */
+
+  /* NEW PAGE ROUTE */
+  if(name === "new_page.orbit"){
     document.getElementById("view").innerHTML =
-      "<h2>Create new page</h2>";
+      "<h2>Neue Seite erstellen</h2>";
     return;
   }
 
-  // LOCAL FIRST
   let local = pages.find(p => p.name === name);
 
   if(local){
@@ -218,7 +196,6 @@ async function openPage(){
     return;
   }
 
-  // SERVER
   let res = await fetch("/page/" + name);
   let data = await res.json();
 
@@ -243,7 +220,7 @@ async function upload(){
   });
 
   document.getElementById("view").innerText =
-    "SAVED (LOCAL + SERVER)";
+    "SAVED";
 }
 
 /* EXPLORE */
@@ -252,17 +229,17 @@ async function explore(){
   let res = await fetch("/allpages");
   let data = await res.json();
 
-  let html = "<h2>Orbit Explorer</h2>";
+  let html = "<h2>Explorer</h2>";
 
   data.forEach(p=>{
-    html += `<p>${p.name} (${p.creator})</p>`;
+    html += `<p>${p.name}</p>`;
   });
 
   document.getElementById("view").innerHTML = html;
 }
 
-/* START SYNC */
-loadCoins();
+/* INIT */
+updateCoins();
 
 </script>
 
