@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
 <meta charset="UTF-8">
-<title>Minecraft FPS World</title>
+<title>Minecraft FPS World FIX</title>
 <style>
     body { margin: 0; overflow: hidden; }
     canvas { display: block; }
@@ -12,14 +12,14 @@
         left: 10px;
         color: white;
         font-family: sans-serif;
-        background: rgba(0,0,0,0.4);
+        background: rgba(0,0,0,0.5);
         padding: 8px;
     }
 </style>
 </head>
 <body>
 
-<div id="info">Klick: Maus aktiv | WASD bewegen | Space springen</div>
+<div id="info">Klick = Maus aktiv | WASD | Space</div>
 
 <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
 
@@ -28,8 +28,8 @@ let scene, camera, renderer;
 
 let velocityY = 0;
 let canJump = false;
-
 const keys = {};
+
 document.addEventListener("keydown", e => keys[e.key.toLowerCase()] = true);
 document.addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
 
@@ -37,11 +37,14 @@ init();
 animate();
 
 /* =========================
-   SIMPLE NOISE (HÜGEL)
+   STABILE NOISE (HÜGEL)
 ========================= */
 function noise(x, z) {
-    return Math.sin(x * 0.2) * Math.cos(z * 0.2) * 2
-         + Math.sin(x * 0.05 + z * 0.05) * 4;
+    return (
+        Math.sin(x * 0.15) * 2 +
+        Math.cos(z * 0.15) * 2 +
+        Math.sin((x + z) * 0.05) * 4
+    );
 }
 
 /* =========================
@@ -54,11 +57,11 @@ function grassTexture() {
     const ctx = c.getContext("2d");
 
     ctx.fillStyle = "#3cb043";
-    ctx.fillRect(0,0,64,64);
+    ctx.fillRect(0, 0, 64, 64);
 
-    for (let i=0;i<400;i++) {
-        ctx.fillStyle = `rgb(0,${100+Math.random()*100},0)`;
-        ctx.fillRect(Math.random()*64, Math.random()*64, 2, 2);
+    for (let i = 0; i < 300; i++) {
+        ctx.fillStyle = `rgb(0,${120 + Math.random() * 80},0)`;
+        ctx.fillRect(Math.random() * 64, Math.random() * 64, 2, 2);
     }
 
     return new THREE.CanvasTexture(c);
@@ -67,15 +70,21 @@ function grassTexture() {
 function init() {
 
     scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x87CEEB);
+    scene.background = new THREE.Color(0x87CEEB); // Himmel
 
-    camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 1000);
+    camera = new THREE.PerspectiveCamera(
+        75,
+        innerWidth / innerHeight,
+        0.1,
+        1000
+    );
 
     renderer = new THREE.WebGLRenderer();
     renderer.setSize(innerWidth, innerHeight);
     document.body.appendChild(renderer.domElement);
 
-    scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+    // Licht
+    scene.add(new THREE.AmbientLight(0xffffff, 0.6));
 
     const light = new THREE.DirectionalLight(0xffffff, 1);
     light.position.set(10, 20, 10);
@@ -83,17 +92,23 @@ function init() {
 
     const tex = grassTexture();
     const mat = new THREE.MeshLambertMaterial({ map: tex });
-    const geo = new THREE.BoxGeometry(1,1,1);
+    const geo = new THREE.BoxGeometry(1, 1, 1);
 
     /* =========================
-       🌄 ZUFALLSWELT MIT HÜGELN
+       🌄 WELT (GARANTIERT SICHTBAR)
     ========================= */
-    for (let x = -25; x < 25; x++) {
-        for (let z = -25; z < 25; z++) {
+    const SIZE = 20;
 
+    for (let x = -SIZE; x < SIZE; x++) {
+        for (let z = -SIZE; z < SIZE; z++) {
+
+            // FIX: Höhe sauber begrenzt
             let h = Math.floor(noise(x, z));
 
-            for (let y = -3; y <= h; y++) {
+            if (h < 0) h = 0;
+            if (h > 6) h = 6;
+
+            for (let y = 0; y <= h; y++) {
                 const cube = new THREE.Mesh(geo, mat);
                 cube.position.set(x, y, z);
                 scene.add(cube);
@@ -101,9 +116,9 @@ function init() {
         }
     }
 
-    camera.position.set(0, 5, 5);
+    // 👇 WICHTIG: Kamera STARTPOSITION
+    camera.position.set(0, 8, 10);
 
-    /* MOUSE LOCK */
     document.body.addEventListener("click", () => {
         document.body.requestPointerLock();
     });
@@ -111,7 +126,7 @@ function init() {
     document.addEventListener("mousemove", mouseMove);
 
     window.addEventListener("resize", () => {
-        camera.aspect = innerWidth/innerHeight;
+        camera.aspect = innerWidth / innerHeight;
         camera.updateProjectionMatrix();
         renderer.setSize(innerWidth, innerHeight);
     });
@@ -133,7 +148,7 @@ function mouseMove(e) {
 }
 
 /* =========================
-   GAME LOOP
+   LOOP
 ========================= */
 function animate() {
     requestAnimationFrame(animate);
@@ -141,18 +156,18 @@ function animate() {
     camera.rotation.x = rotX;
     camera.rotation.y = rotY;
 
-    let speed = 0.15;
+    const speed = 0.12;
 
-    let forward = new THREE.Vector3(
+    const forward = new THREE.Vector3(
         Math.sin(rotY),
         0,
         Math.cos(rotY)
     );
 
-    let right = new THREE.Vector3(
-        Math.sin(rotY + Math.PI/2),
+    const right = new THREE.Vector3(
+        Math.sin(rotY + Math.PI / 2),
         0,
-        Math.cos(rotY + Math.PI/2)
+        Math.cos(rotY + Math.PI / 2)
     );
 
     if (keys["w"]) camera.position.addScaledVector(forward, -speed);
@@ -164,14 +179,14 @@ function animate() {
     velocityY -= 0.01;
     camera.position.y += velocityY;
 
-    if (camera.position.y < 5) {
-        camera.position.y = 5;
+    if (camera.position.y < 8) {
+        camera.position.y = 8;
         velocityY = 0;
         canJump = true;
     }
 
     if (keys[" "] && canJump) {
-        velocityY = 0.25;
+        velocityY = 0.22;
         canJump = false;
     }
 
