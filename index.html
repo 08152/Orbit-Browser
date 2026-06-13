@@ -2,197 +2,190 @@
 <html lang="de">
 <head>
 <meta charset="UTF-8">
-<title>Voxel World FIXED</title>
-
+<title>Mini Minecraft 3D</title>
 <style>
-body { margin:0; overflow:hidden; }
-canvas { display:block; }
+body { margin: 0; overflow: hidden; }
+canvas { display: block; }
+#info {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    color: white;
+    font-family: sans-serif;
+    background: rgba(0,0,0,0.4);
+    padding: 8px;
+}
 </style>
 </head>
-
 <body>
 
+<div id="info">Klick: Maus aktiv | WASD bewegen | Space springen</div>
+
 <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/loaders/GLTFLoader.js"></script>
 
 <script>
+let scene, camera, renderer;
 
-// ================= SCENE =================
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x87CEEB);
-
-// ================= CAMERA =================
-const camera = new THREE.PerspectiveCamera(
-75,
-innerWidth/innerHeight,
-0.1,
-1000
-);
-
-// FIX: Kamera richtig positioniert
-camera.position.set(10, 15, 25);
-
-// ================= RENDERER =================
-const renderer = new THREE.WebGLRenderer({antialias:true});
-renderer.setSize(innerWidth, innerHeight);
-document.body.appendChild(renderer.domElement);
-
-// ================= LIGHT =================
-scene.add(new THREE.AmbientLight(0xffffff, 0.8));
-
-const light = new THREE.DirectionalLight(0xffffff, 1.2);
-light.position.set(20, 40, 10);
-scene.add(light);
-
-// ================= GLB LOADER =================
-const loader = new THREE.GLTFLoader();
-let treeModel = null;
-
-loader.load(
-"baum.glb",
-(gltf)=>{
-treeModel = gltf.scene;
-console.log("GLB loaded ✔");
-},
-undefined,
-(err)=>console.error("GLB ERROR:", err)
-);
-
-// ================= GRASS =================
-function createGrass(){
-const c = document.createElement("canvas");
-c.width = 64;
-c.height = 64;
-const ctx = c.getContext("2d");
-
-ctx.fillStyle = "#3cb043";
-ctx.fillRect(0,0,64,64);
-
-for(let i=0;i<400;i++){
-ctx.fillStyle = `rgb(0,${100+Math.random()*100},0)`;
-ctx.fillRect(Math.random()*64, Math.random()*64, 2,2);
-}
-
-return new THREE.CanvasTexture(c);
-}
-
-const tex = createGrass();
-
-const mat = new THREE.MeshLambertMaterial({map:tex});
-const geo = new THREE.BoxGeometry(1,1,1);
-
-// ================= WORLD =================
-for(let x=-20;x<20;x++){
-for(let z=-20;z<20;z++){
-
-const h =
-Math.floor(Math.sin(x*0.2)*2 + Math.cos(z*0.2)*2);
-
-// ground blocks
-for(let y=0;y<=h;y++){
-const cube = new THREE.Mesh(geo,mat);
-cube.position.set(x,y,z);
-scene.add(cube);
-}
-
-// trees
-if(Math.random()<0.03){
-spawnTree(x,h+1,z);
-}
-
-}
-}
-
-// ================= DEBUG (WICHTIG!) =================
-const test = new THREE.Mesh(
-new THREE.BoxGeometry(2,2,2),
-new THREE.MeshStandardMaterial({color:0xff0000})
-);
-test.position.set(0,5,0);
-scene.add(test);
-
-// ================= TREE SPAWN =================
-function spawnTree(x,y,z){
-
-if(!treeModel) return;
-
-const tree = treeModel.clone();
-
-tree.position.set(x,y,z);
-tree.scale.set(1,1,1);
-
-scene.add(tree);
-}
-
-// ================= CONTROLS =================
-document.body.addEventListener("click",()=>{
-document.body.requestPointerLock();
-});
-
-let rotX=0, rotY=0;
-
-document.addEventListener("mousemove",(e)=>{
-if(document.pointerLockElement!==document.body) return;
-
-rotY -= e.movementX*0.002;
-rotX -= e.movementY*0.002;
-
-rotX = Math.max(-1.5, Math.min(1.5, rotX));
-
-camera.rotation.x = rotX;
-camera.rotation.y = rotY;
-});
-
-// ================= MOVEMENT =================
+let velocityY = 0;
+let canJump = false;
 const keys = {};
 
-document.addEventListener("keydown",e=>keys[e.key.toLowerCase()]=true);
-document.addEventListener("keyup",e=>keys[e.key.toLowerCase()]=false);
+document.addEventListener("keydown", e => keys[e.key.toLowerCase()] = true);
+document.addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
 
-// ================= ANIMATE LOOP (FIXED) =================
-function animate(){
-
-requestAnimationFrame(animate);
-
-let speed = 0.2;
-
-let forward = new THREE.Vector3(
-Math.sin(camera.rotation.y),
-0,
-Math.cos(camera.rotation.y)
-);
-
-let right = new THREE.Vector3(
-Math.sin(camera.rotation.y + Math.PI/2),
-0,
-Math.cos(camera.rotation.y + Math.PI/2)
-);
-
-if(keys["w"]) camera.position.addScaledVector(forward,-speed);
-if(keys["s"]) camera.position.addScaledVector(forward,speed);
-if(keys["a"]) camera.position.addScaledVector(right,-speed);
-if(keys["d"]) camera.position.addScaledVector(right,speed);
-
-// FIX: immer Richtung schauen
-camera.lookAt(
-camera.position.x + forward.x,
-camera.position.y,
-camera.position.z + forward.z
-);
-
-renderer.render(scene,camera);
-
-}
-
+init();
 animate();
 
-// ================= RESIZE =================
-window.addEventListener("resize",()=>{
-camera.aspect = innerWidth/innerHeight;
-camera.updateProjectionMatrix();
-renderer.setSize(innerWidth,innerHeight);
-});
+/* =========================
+   SIMPLE HILL WORLD
+========================= */
+function height(x, z) {
+    return Math.floor(
+        Math.sin(x * 0.15) * 2 +
+        Math.cos(z * 0.15) * 2 +
+        Math.sin((x + z) * 0.05) * 3
+    );
+}
 
+/* =========================
+   GRAS TEXTUR
+========================= */
+function grassTexture() {
+    const c = document.createElement("canvas");
+    c.width = 64;
+    c.height = 64;
+    const ctx = c.getContext("2d");
+
+    ctx.fillStyle = "#3cb043";
+    ctx.fillRect(0,0,64,64);
+
+    for (let i=0;i<300;i++) {
+        ctx.fillStyle = `rgb(0,${100+Math.random()*120},0)`;
+        ctx.fillRect(Math.random()*64, Math.random()*64, 2, 2);
+    }
+
+    return new THREE.CanvasTexture(c);
+}
+
+function init() {
+
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x87CEEB);
+
+    camera = new THREE.PerspectiveCamera(
+        75,
+        innerWidth/innerHeight,
+        0.1,
+        1000
+    );
+
+    renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(innerWidth, innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    // Licht
+    scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+    const light = new THREE.DirectionalLight(0xffffff, 1);
+    light.position.set(10,20,10);
+    scene.add(light);
+
+    const tex = grassTexture();
+    const mat = new THREE.MeshLambertMaterial({ map: tex });
+    const geo = new THREE.BoxGeometry(1,1,1);
+
+    /* =========================
+       🌍 WELT (HÜGEL)
+    ========================= */
+    const SIZE = 25;
+
+    for (let x = -SIZE; x < SIZE; x++) {
+        for (let z = -SIZE; z < SIZE; z++) {
+
+            let h = height(x, z);
+            if (h < 0) h = 0;
+            if (h > 6) h = 6;
+
+            for (let y = 0; y <= h; y++) {
+                const cube = new THREE.Mesh(geo, mat);
+                cube.position.set(x, y, z);
+                scene.add(cube);
+            }
+        }
+    }
+
+    camera.position.set(0, 8, 10);
+
+    /* =========================
+       MOUSE LOOK
+    ========================= */
+    document.body.addEventListener("click", () => {
+        document.body.requestPointerLock();
+    });
+
+    let rotX = 0;
+    let rotY = 0;
+
+    document.addEventListener("mousemove", (e) => {
+        if (document.pointerLockElement !== document.body) return;
+
+        rotY -= e.movementX * 0.002;
+        rotX -= e.movementY * 0.002;
+
+        rotX = Math.max(-1.5, Math.min(1.5, rotX));
+
+        camera.rotation.x = rotX;
+        camera.rotation.y = rotY;
+    });
+
+    window.addEventListener("resize", () => {
+        camera.aspect = innerWidth/innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(innerWidth, innerHeight);
+    });
+}
+
+/* =========================
+   GAME LOOP
+========================= */
+function animate() {
+    requestAnimationFrame(animate);
+
+    const speed = 0.15;
+
+    const forward = new THREE.Vector3(
+        Math.sin(camera.rotation.y),
+        0,
+        Math.cos(camera.rotation.y)
+    );
+
+    const right = new THREE.Vector3(
+        Math.sin(camera.rotation.y + Math.PI/2),
+        0,
+        Math.cos(camera.rotation.y + Math.PI/2)
+    );
+
+    if (keys["w"]) camera.position.addScaledVector(forward, -speed);
+    if (keys["s"]) camera.position.addScaledVector(forward, speed);
+    if (keys["a"]) camera.position.addScaledVector(right, -speed);
+    if (keys["d"]) camera.position.addScaledVector(right, speed);
+
+    // Gravity
+    velocityY -= 0.01;
+    camera.position.y += velocityY;
+
+    if (camera.position.y < 8) {
+        camera.position.y = 8;
+        velocityY = 0;
+        canJump = true;
+    }
+
+    if (keys[" "] && canJump) {
+        velocityY = 0.22;
+        canJump = false;
+    }
+
+    renderer.render(scene, camera);
+}
 </script>
 
 </body>
