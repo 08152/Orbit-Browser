@@ -1,255 +1,105 @@
 <!DOCTYPE html>
-<html>
+<html lang="de">
 <head>
 <meta charset="UTF-8">
-<title>Orbit Browser</title>
-
+<title>Mini Minecraft 3D</title>
 <style>
-body{
-  margin:0;
-  background:#0b0b0b;
-  color:white;
-  font-family:Arial;
-}
-
-/* TOP */
-#top{
-  display:flex;
-  gap:6px;
-  padding:8px;
-  background:#111;
-}
-
-#url{
-  flex:1;
-  padding:8px;
-  background:#1a1a1a;
-  border:1px solid #333;
-  color:white;
-}
-
-/* BUTTONS */
-button{
-  background:#1a1a1a;
-  border:1px solid #333;
-  color:white;
-  padding:6px 10px;
-  cursor:pointer;
-}
-
-/* VIEW */
-#view{
-  padding:18px;
-  min-height:80vh;
-}
-
-/* COINS */
-#coins{
-  position:fixed;
-  top:10px;
-  right:10px;
-  background:#111;
-  padding:10px;
-  border:1px solid #333;
-}
-
-/* BACK */
-#back{
-  position:fixed;
-  bottom:10px;
-  left:10px;
-}
+    body { margin: 0; overflow: hidden; }
+    canvas { display: block; }
 </style>
 </head>
-
 <body>
 
-<div id="coins">Coins: <span id="c">0</span></div>
-<button id="back" onclick="back()">← Back</button>
-
-<div id="top">
-  <input id="url" placeholder="page.orbit / new_page.orbit" onkeydown="go(event)">
-  <button onclick="coinPin()">Coin+</button>
-</div>
-
-<div id="view">Orbit Ready</div>
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
 
 <script>
+let scene, camera, renderer;
 
-let coins = Number(localStorage.getItem("coins") || 0);
-let pages = JSON.parse(localStorage.getItem("pages") || "[]");
+init();
+animate();
 
-let queue = JSON.parse(localStorage.getItem("queue") || JSON.stringify({
-  coins:0,
-  pages:[]
-}));
+function createGrassTexture() {
+    const c = document.createElement("canvas");
+    c.width = 128;
+    c.height = 128;
+    const ctx = c.getContext("2d");
 
-let history = [];
+    // Grundfarbe Gras
+    ctx.fillStyle = "#3cb043";
+    ctx.fillRect(0, 0, 128, 128);
 
-document.getElementById("c").innerText = coins;
-
-/* SAVE */
-function save(){
-  localStorage.setItem("coins", coins);
-  localStorage.setItem("pages", JSON.stringify(pages));
-  localStorage.setItem("queue", JSON.stringify(queue));
-}
-
-/* SYNC */
-async function sync(){
-
-  try{
-
-    let r = await fetch("/coins");
-    let d = await r.json();
-    coins = d.coins || 0;
-
-    if(queue.coins !== 0){
-      await fetch("/coins/sync", {
-        method:"POST",
-        headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({delta:queue.coins})
-      });
-      queue.coins = 0;
+    // kleine "Grasflecken"
+    for (let i = 0; i < 1500; i++) {
+        const shade = 80 + Math.random() * 80;
+        ctx.fillStyle = `rgb(0,${shade},0)`;
+        ctx.fillRect(Math.random()*128, Math.random()*128, 2, 2);
     }
 
-    for(let p of queue.pages){
-      await fetch("/page/save", {
-        method:"POST",
-        headers:{"Content-Type":"application/json"},
-        body:JSON.stringify(p)
-      });
+    const tex = new THREE.CanvasTexture(c);
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(1, 1);
+
+    return tex;
+}
+
+function init() {
+
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x87CEEB); // 🌤️ Himmel
+
+    camera = new THREE.PerspectiveCamera(
+        75,
+        window.innerWidth / window.innerHeight,
+        0.1,
+        1000
+    );
+
+    renderer = new THREE.WebGLRenderer();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    // Licht
+    const light = new THREE.DirectionalLight(0xffffff, 1);
+    light.position.set(10, 20, 10);
+    scene.add(light);
+
+    scene.add(new THREE.AmbientLight(0xffffff, 0.4));
+
+    // 🌿 Textur (garantiert sichtbar)
+    const texture = createGrassTexture();
+
+    const material = new THREE.MeshLambertMaterial({ map: texture });
+    const geometry = new THREE.BoxGeometry(1, 1, 1);
+
+    // 🧱 Welt
+    for (let x = -15; x < 15; x++) {
+        for (let z = -15; z < 15; z++) {
+            const cube = new THREE.Mesh(geometry, material);
+            cube.position.set(x, 0, z);
+            scene.add(cube);
+        }
     }
 
-    queue.pages = [];
+    camera.position.set(0, 8, 15);
 
-    save();
-
-  }catch(e){
-    console.log("offline");
-  }
-
-  document.getElementById("c").innerText = coins;
+    document.addEventListener("keydown", move);
 }
 
-setInterval(sync, 7000);
-sync();
+function move(e) {
+    const s = 0.6;
 
-/* BACK */
-function back(){
-  if(history.length <= 1) return;
-  history.pop();
-  openPage(history[history.length-1], false);
+    if (e.key === "w") camera.position.z -= s;
+    if (e.key === "s") camera.position.z += s;
+    if (e.key === "a") camera.position.x -= s;
+    if (e.key === "d") camera.position.x += s;
+    if (e.key === " ") camera.position.y += s;
+    if (e.key === "Shift") camera.position.y -= s;
 }
 
-/* NAV */
-function go(e){
-  if(e.key === "Enter"){
-    openPage(e.target.value);
-  }
+function animate() {
+    requestAnimationFrame(animate);
+    renderer.render(scene, camera);
 }
-
-/* OPEN PAGE */
-async function openPage(name, add=true){
-
-  if(name === "new_page.orbit"){
-
-    document.getElementById("view").innerHTML = `
-      <h2>Neue Seite</h2>
-
-      <input id="n" placeholder="name"><br><br>
-
-      <input type="file" id="img"><br><br>
-
-      <textarea id="t" style="width:100%;height:120px;"></textarea><br><br>
-
-      <button onclick="create()">Save</button>
-      <button onclick="back()">← Back</button>
-    `;
-    return;
-  }
-
-  let local = pages.find(p => p.name === name);
-  let content = "";
-
-  if(local){
-    content = local.content;
-  }else{
-    try{
-      let r = await fetch("/page/" + name);
-      let d = await r.json();
-      content = d.content;
-    }catch(e){
-      content = "OFFLINE";
-    }
-  }
-
-  document.getElementById("view").innerHTML = content;
-
-  if(add) history.push(name);
-}
-
-/* CREATE PAGE + IMAGE */
-function create(){
-
-  let name = document.getElementById("n").value;
-  let text = document.getElementById("t").value;
-  let file = document.getElementById("img").files[0];
-
-  if(!file){
-
-    savePage(name, text);
-    return;
-  }
-
-  let reader = new FileReader();
-
-  reader.onload = async function(){
-
-    let res = await fetch("/upload/image", {
-      method:"POST",
-      headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({ image: reader.result })
-    });
-
-    let data = await res.json();
-
-    let html = `<img src="${data.url}" width="250"><br>${text}`;
-
-    savePage(name, html);
-  };
-
-  reader.readAsDataURL(file);
-}
-
-/* SAVE PAGE */
-function savePage(name, content){
-
-  pages.push({name, content});
-  queue.pages.push({name, content});
-
-  save();
-
-  openPage(name);
-}
-
-/* COIN PIN */
-function coinPin(){
-
-  let pin = prompt("PIN:");
-
-  if(pin !== "081508151235180Rss#") return alert("wrong");
-
-  let add = Number(prompt("coins:"));
-
-  coins += add;
-  queue.coins += add;
-
-  save();
-
-  document.getElementById("c").innerText = coins;
-}
-
 </script>
 
 </body>
