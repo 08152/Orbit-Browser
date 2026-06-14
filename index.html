@@ -4,8 +4,13 @@
 <meta charset="UTF-8">
 <title>Mini Minecraft 3D</title>
 <style>
-body { margin: 0; overflow: hidden; }
-canvas { display: block; }
+body {
+    margin: 0;
+    overflow: hidden;
+}
+canvas {
+    display: block;
+}
 #info {
     position: absolute;
     top: 10px;
@@ -47,26 +52,6 @@ function height(x, z) {
     );
 }
 
-/* =========================
-   GRAS TEXTUR
-========================= */
-function grassTexture() {
-    const c = document.createElement("canvas");
-    c.width = 64;
-    c.height = 64;
-    const ctx = c.getContext("2d");
-
-    ctx.fillStyle = "#3cb043";
-    ctx.fillRect(0,0,64,64);
-
-    for (let i=0;i<300;i++) {
-        ctx.fillStyle = `rgb(0,${100+Math.random()*120},0)`;
-        ctx.fillRect(Math.random()*64, Math.random()*64, 2, 2);
-    }
-
-    return new THREE.CanvasTexture(c);
-}
-
 function init() {
 
     scene = new THREE.Scene();
@@ -74,7 +59,7 @@ function init() {
 
     camera = new THREE.PerspectiveCamera(
         75,
-        innerWidth/innerHeight,
+        innerWidth / innerHeight,
         0.1,
         1000
     );
@@ -84,17 +69,29 @@ function init() {
     document.body.appendChild(renderer.domElement);
 
     // Licht
-    scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+    scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+
     const light = new THREE.DirectionalLight(0xffffff, 1);
-    light.position.set(10,20,10);
+    light.position.set(10, 20, 10);
     scene.add(light);
 
-    const tex = grassTexture();
-    const mat = new THREE.MeshLambertMaterial({ map: tex });
+    // TEXTUR LADEN
+    const tex = new THREE.TextureLoader().load("grass.png");
+
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
+    tex.magFilter = THREE.NearestFilter;
+    tex.minFilter = THREE.NearestFilter;
+
+    const mat = new THREE.MeshLambertMaterial({
+        map: tex
+    });
+
     const geo = new THREE.BoxGeometry(1,1,1);
 
     /* =========================
-       🌍 WELT (HÜGEL)
+       WELT
     ========================= */
     const SIZE = 25;
 
@@ -102,12 +99,20 @@ function init() {
         for (let z = -SIZE; z < SIZE; z++) {
 
             let h = height(x, z);
+
             if (h < 0) h = 0;
             if (h > 6) h = 6;
 
             for (let y = 0; y <= h; y++) {
+
                 const cube = new THREE.Mesh(geo, mat);
-                cube.position.set(x, y, z);
+
+                cube.position.set(
+                    x,
+                    y,
+                    z
+                );
+
                 scene.add(cube);
             }
         }
@@ -126,7 +131,9 @@ function init() {
     let rotY = 0;
 
     document.addEventListener("mousemove", (e) => {
-        if (document.pointerLockElement !== document.body) return;
+
+        if (document.pointerLockElement !== document.body)
+            return;
 
         rotY -= e.movementX * 0.002;
         rotX -= e.movementY * 0.002;
@@ -138,9 +145,16 @@ function init() {
     });
 
     window.addEventListener("resize", () => {
-        camera.aspect = innerWidth/innerHeight;
+
+        camera.aspect =
+            innerWidth / innerHeight;
+
         camera.updateProjectionMatrix();
-        renderer.setSize(innerWidth, innerHeight);
+
+        renderer.setSize(
+            innerWidth,
+            innerHeight
+        );
     });
 }
 
@@ -148,6 +162,7 @@ function init() {
    GAME LOOP
 ========================= */
 function animate() {
+
     requestAnimationFrame(animate);
 
     const speed = 0.15;
@@ -159,17 +174,24 @@ function animate() {
     );
 
     const right = new THREE.Vector3(
-        Math.sin(camera.rotation.y + Math.PI/2),
+        Math.sin(camera.rotation.y + Math.PI / 2),
         0,
-        Math.cos(camera.rotation.y + Math.PI/2)
+        Math.cos(camera.rotation.y + Math.PI / 2)
     );
 
-    if (keys["w"]) camera.position.addScaledVector(forward, -speed);
-    if (keys["s"]) camera.position.addScaledVector(forward, speed);
-    if (keys["a"]) camera.position.addScaledVector(right, -speed);
-    if (keys["d"]) camera.position.addScaledVector(right, speed);
+    if (keys["w"])
+        camera.position.addScaledVector(forward, -speed);
 
-    // Gravity
+    if (keys["s"])
+        camera.position.addScaledVector(forward, speed);
+
+    if (keys["a"])
+        camera.position.addScaledVector(right, -speed);
+
+    if (keys["d"])
+        camera.position.addScaledVector(right, speed);
+
+    // Schwerkraft
     velocityY -= 0.01;
     camera.position.y += velocityY;
 
