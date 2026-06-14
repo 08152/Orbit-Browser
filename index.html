@@ -1,7 +1,9 @@
-<!DOCTYPE html><html lang="de">
+<!DOCTYPE html>
+<html lang="de">
 <head>
 <meta charset="UTF-8">
 <title>Mini Minecraft 3D</title>
+
 <style>
 body {
     margin: 0;
@@ -20,15 +22,27 @@ canvas {
     padding: 8px;
 }
 </style>
+
 </head>
-<body><div id="info">Klick: Maus aktiv | WASD bewegen | Space springen</div><script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script><script>
+<body>
+
+<div id="info">Klick: Maus aktiv | WASD bewegen | Space springen</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+
+<script>
 let scene, camera, renderer;
 
 let velocityY = 0;
 let canJump = false;
 const keys = {};
 
-let worldBlocks = new Map();
+// 🎥 CAMERA ROTATION (Minecraft style)
+let rotX = 0;
+let rotY = 0;
+
+// WORLD + SHARED DATA
+window.worldBlocks = new Map();
 
 document.addEventListener("keydown", e => keys[e.key.toLowerCase()] = true);
 document.addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
@@ -52,60 +66,50 @@ function init() {
     renderer.setSize(innerWidth, innerHeight);
     document.body.appendChild(renderer.domElement);
 
+    // Licht
     scene.add(new THREE.AmbientLight(0xffffff, 0.8));
 
     const light = new THREE.DirectionalLight(0xffffff, 1);
     light.position.set(10,20,10);
     scene.add(light);
 
-    window.blockTexture = new THREE.TextureLoader().load("grass.png");
+    // TEXTUR
+    const tex = new THREE.TextureLoader().load("grass.png");
 
-    blockTexture.colorSpace = THREE.SRGBColorSpace;
-    blockTexture.magFilter = THREE.NearestFilter;
-    blockTexture.minFilter = THREE.NearestFilter;
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.magFilter = THREE.NearestFilter;
+    tex.minFilter = THREE.NearestFilter;
 
     window.blockMaterial =
-        new THREE.MeshLambertMaterial({
-            map:blockTexture
-        });
+        new THREE.MeshLambertMaterial({ map: tex });
 
     window.blockGeometry =
         new THREE.BoxGeometry(1,1,1);
 
     camera.position.set(0,8,10);
 
+    // POINTER LOCK
     document.body.addEventListener("click", () => {
         document.body.requestPointerLock();
     });
 
-    let rotX = 0;
-    let rotY = 0;
-
+    // MOUSE LOOK
     document.addEventListener("mousemove", (e) => {
 
-        if(document.pointerLockElement !== document.body)
+        if (document.pointerLockElement !== document.body)
             return;
 
         rotY -= e.movementX * 0.002;
         rotX -= e.movementY * 0.002;
 
         rotX = Math.max(-1.5, Math.min(1.5, rotX));
-
-        camera.rotation.x = rotX;
-        camera.rotation.y = rotY;
     });
 
     window.addEventListener("resize", () => {
 
-        camera.aspect =
-            innerWidth / innerHeight;
-
+        camera.aspect = innerWidth / innerHeight;
         camera.updateProjectionMatrix();
-
-        renderer.setSize(
-            innerWidth,
-            innerHeight
-        );
+        renderer.setSize(innerWidth, innerHeight);
     });
 
     if(window.initChunks)
@@ -116,10 +120,60 @@ function animate() {
 
     requestAnimationFrame(animate);
 
+    // 🎥 CAMERA FIRST PERSON
+    camera.rotation.order = "YXZ";
+    camera.rotation.y = rotY;
+    camera.rotation.x = rotX;
+
+    // MOVEMENT (WASD)
+    const speed = 0.15;
+
+    const forward = new THREE.Vector3(
+        Math.sin(rotY),
+        0,
+        Math.cos(rotY)
+    );
+
+    const right = new THREE.Vector3(
+        Math.sin(rotY + Math.PI/2),
+        0,
+        Math.cos(rotY + Math.PI/2)
+    );
+
+    if(keys["w"])
+        camera.position.addScaledVector(forward, -speed);
+
+    if(keys["s"])
+        camera.position.addScaledVector(forward, speed);
+
+    if(keys["a"])
+        camera.position.addScaledVector(right, -speed);
+
+    if(keys["d"])
+        camera.position.addScaledVector(right, speed);
+
+    // PHYSICS
+    if(window.updatePhysics)
+        updatePhysics();
+
+    // CHUNKS
     if(window.updateChunks)
         updateChunks();
 
-    renderer.render(scene,camera);
+    // SKIN
+    if(window.updateSkin)
+        updateSkin();
+
+    renderer.render(scene, camera);
 }
-</script><script src="1.js"></script><script src="2.js"></script><script src="inventar.js"></script><script src="skin.js"></script><script src="verwaltung.js"></script></body>
+</script>
+
+<!-- MODULES -->
+<script src="1.js"></script>
+<script src="2.js"></script>
+<script src="inventar.js"></script>
+<script src="skin.js"></script>
+<script src="verwaltung.js"></script>
+
+</body>
 </html>
