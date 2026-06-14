@@ -3,113 +3,138 @@ const RENDER_DISTANCE = 3;
 
 const loadedChunks = new Map();
 
+// Chunk Struktur:
+// cx,cz -> { blocks: [], meshes: [] }
+
+function chunkKey(x,z){
+    return `${x},${z}`;
+}
+
+// =========================
+// HEIGHT GENERATION
 function getHeight(x,z){
 
-return Math.floor(
-    Math.sin(x * 0.08) * 4 +
-    Math.cos(z * 0.08) * 4 +
-    Math.sin((x+z) * 0.03) * 8
-);
-
+    return Math.floor(
+        Math.sin(x * 0.08) * 4 +
+        Math.cos(z * 0.08) * 4 +
+        Math.sin((x+z) * 0.03) * 8
+    );
 }
 
-function chunkKey(cx,cz){
-return cx + "," + cz;
-}
-
+// =========================
+// BLOCK CREATE
 function createBlock(x,y,z){
 
-const cube = new THREE.Mesh(
-    blockGeometry,
-    blockMaterial
-);
+    const cube = new THREE.Mesh(
+        blockGeometry,
+        blockMaterial
+    );
 
-cube.position.set(x,y,z);
+    cube.position.set(x,y,z);
 
-scene.add(cube);
+    scene.add(cube);
 
-worldBlocks.set(
-    `${x},${y},${z}`,
-    cube
-);
+    worldBlocks.set(`${x},${y},${z}`, cube);
 
-return cube;
-
+    return cube;
 }
 
+// =========================
+// CHUNK GENERATE
 function generateChunk(cx,cz){
 
-const key = chunkKey(cx,cz);
+    const key = chunkKey(cx,cz);
 
-if(loadedChunks.has(key))
-    return;
+    if(loadedChunks.has(key))
+        return;
 
-loadedChunks.set(key,true);
+    const chunkData = {
+        meshes: []
+    };
 
-const startX = cx * CHUNK_SIZE;
-const startZ = cz * CHUNK_SIZE;
+    loadedChunks.set(key, chunkData);
 
-for(let x=0;x<CHUNK_SIZE;x++){
+    const startX = cx * CHUNK_SIZE;
+    const startZ = cz * CHUNK_SIZE;
 
-    for(let z=0;z<CHUNK_SIZE;z++){
+    for(let x=0;x<CHUNK_SIZE;x++){
+        for(let z=0;z<CHUNK_SIZE;z++){
 
-        const wx = startX + x;
-        const wz = startZ + z;
+            const wx = startX + x;
+            const wz = startZ + z;
 
-        let h = getHeight(wx,wz);
+            let h = getHeight(wx,wz);
 
-        if(h < 1) h = 1;
-        if(h > 20) h = 20;
+            if(h < 1) h = 1;
+            if(h > 20) h = 20;
 
-        for(let y=0;y<=h;y++){
+            for(let y=0;y<=h;y++){
 
-            createBlock(
-                wx,
-                y,
-                wz
-            );
-
+                const cube = createBlock(wx,y,wz);
+                chunkData.meshes.push(cube);
+            }
         }
     }
 }
 
+// =========================
+// CHUNK DELETE (WICHTIG)
+function removeChunk(cx,cz){
+
+    const key = chunkKey(cx,cz);
+
+    const chunk = loadedChunks.get(key);
+
+    if(!chunk) return;
+
+    for(const mesh of chunk.meshes){
+
+        const pos = mesh.position;
+        const bKey = `${Math.floor(pos.x)},${Math.floor(pos.y)},${Math.floor(pos.z)}`;
+
+        worldBlocks.delete(bKey);
+        scene.remove(mesh);
+    }
+
+    loadedChunks.delete(key);
 }
 
-function initChunks(){
-
-updateChunks();
-
-}
-
+// =========================
+// UPDATE CHUNKS (LOAD + UNLOAD)
 function updateChunks(){
 
-const cx =
-    Math.floor(
-        camera.position.x / CHUNK_SIZE
-    );
+    const pcx = Math.floor(camera.position.x / CHUNK_SIZE);
+    const pcz = Math.floor(camera.position.z / CHUNK_SIZE);
 
-const cz =
-    Math.floor(
-        camera.position.z / CHUNK_SIZE
-    );
+    const needed = new Set();
 
-for(
-    let x = cx - RENDER_DISTANCE;
-    x <= cx + RENDER_DISTANCE;
-    x++
-){
+    // LOAD
+    for(let x = pcx - RENDER_DISTANCE; x <= pcx + RENDER_DISTANCE; x++){
+        for(let z = pcz - RENDER_DISTANCE; z <= pcz + RENDER_DISTANCE; z++){
 
-    for(
-        let z = cz - RENDER_DISTANCE;
-        z <= cz + RENDER_DISTANCE;
-        z++
-    ){
+            const key = chunkKey(x,z);
+            needed.add(key);
 
-        generateChunk(x,z);
+            generateChunk(x,z);
+        }
+    }
 
+    // UNLOAD
+    for(const key of loadedChunks.keys()){
+
+        if(!needed.has(key)){
+
+            const [cx,cz] = key.split(",").map(Number);
+
+            removeChunk(cx,cz);
+        }
     }
 }
 
+// =========================
+// INIT
+function initChunks(){
+    updateChunks();
 }
 
 window.initChunks = initChunks;
